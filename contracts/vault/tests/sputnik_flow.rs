@@ -160,3 +160,37 @@ async fn exit_without_usdc_storage_becomes_claimable() -> R<()> {
     assert_books(&w.ledger("Usdc").await?);
     Ok(())
 }
+
+/// Only accounts in one of the DAO's member groups can hold shares. Anyone else gets their NEAR back
+/// and can withdraw their pending USDC.
+#[tokio::test]
+async fn non_member_join_is_refunded() -> R<()> {
+    let w = world().await?;
+    w.all_join().await?;
+    let outsider = w.shop.clone();
+    w.call(&outsider, &w.usdc, "mint", json!({ "amount": near_sdk::json_types::U128(100 * USDC) }), 0, 30).await?.assert_success();
+    w.call(
+        &outsider,
+        &w.usdc,
+        "ft_transfer_call",
+        json!({ "receiver_id": w.vault.account_id(), "amount": near_sdk::json_types::U128(100 * USDC), "msg": "join" }),
+        1,
+        100,
+    )
+    .await?
+    .assert_success();
+    let before = w.near_of(&outsider).await?;
+    w.call(&outsider, &w.vault, "join", json!({}), 10u128.pow(24), 150).await?.assert_success();
+    let shares: near_sdk::json_types::U128 = w.view(&w.vault, "get_shares", json!({ "account_id": outsider })).await?;
+    assert_eq!(shares.0, 0);
+    // The 1 NEAR came back; only gas was spent.
+    let after = w.near_of(&outsider).await?;
+    assert!(before - after < 10u128.pow(23), "NEAR not refunded: before {before}, after {after}");
+
+    w.call(&outsider, &w.vault, "cancel_join", json!({}), 0, 100).await?.assert_success();
+    assert_eq!(w.usdc_of(&outsider).await?, 100 * USDC);
+    assert_eq!(w.balances().await?["members"], 5);
+    assert_books(&w.ledger("Usdc").await?);
+    assert_books(&w.ledger("Near").await?);
+    Ok(())
+}

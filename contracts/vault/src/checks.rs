@@ -66,3 +66,21 @@ pub fn check_proposal(
     objectors.sort();
     Ok(ProposalCheck { approvers, objectors })
 }
+
+/// True when `account` is listed in any `Group` role of a Sputnik v2 policy (the DAO's members).
+/// `Everyone` and token-weighted `Member` roles do not count: shares are for named members only.
+pub fn is_member(policy: &Value, account: &AccountId) -> bool {
+    policy
+        .get("roles")
+        .and_then(Value::as_array)
+        .map(|roles| {
+            roles.iter().any(|role| {
+                role.get("kind")
+                    .and_then(|k| k.get("Group"))
+                    .and_then(Value::as_array)
+                    .map(|group| group.iter().any(|m| m.as_str() == Some(account.as_str())))
+                    .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false)
+}

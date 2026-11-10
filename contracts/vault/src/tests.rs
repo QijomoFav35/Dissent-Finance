@@ -53,7 +53,20 @@ fn join(v: &mut Vault, env: &Env, who: &str, near: u128, usdc_amt: u128) -> u128
         }
     }
     env.call(&who, near);
-    v.join().0
+    let _ = v.join();
+    // The DAO answers get_policy; the callback finishes the join.
+    env.call(&vault_id(), 0);
+    v.complete_join(who, near, Some(&member_policy()))
+}
+
+fn member_policy() -> Value {
+    json!({
+        "roles": [
+            { "name": "all", "kind": "Everyone", "permissions": ["*:AddProposal"], "vote_policy": {} },
+            { "name": "council", "kind": { "Group": ["ada.near", "bayo.near", "chi.near", "dayo.near", "efe.near", "frank.near"] },
+              "permissions": ["*:*"], "vote_policy": {} }
+        ]
+    })
 }
 
 fn five_members() -> (Vault, Env) {
@@ -159,10 +172,62 @@ fn excess_usdc_is_refunded_too() {
 }
 
 #[test]
-#[should_panic(expected = "ERR_EMPTY_DEPOSIT")]
-fn first_join_needs_both_tokens() {
+fn first_join_needs_both_tokens_and_refunds_otherwise() {
     let (mut v, env) = setup();
-    join(&mut v, &env, "ada.near", 10 * NEAR, 0);
+    assert_eq!(join(&mut v, &env, "ada.near", 10 * NEAR, 0), 0);
+    assert_eq!(v.get_balances().total_shares.0, 0);
+    assert_eq!(v.get_ledger(Token::Near).refunded.0, 10 * NEAR);
+    assert_books(&v, Token::Near);
+}
+
+#[test]
+fn non_member_is_refused_and_refunded() {
+    let (mut v, env) = setup();
+    join(&mut v, &env, "ada.near", 10 * NEAR, 100 * USDC);
+    assert_eq!(join(&mut v, &env, "stranger.near", 10 * NEAR, 100 * USDC), 0);
+    assert_eq!(v.get_shares(acc("stranger.near")).0, 0);
+    assert_eq!(v.get_balances().near.0, 10 * NEAR);
+    assert_eq!(v.get_ledger(Token::Near).refunded.0, 10 * NEAR);
+    // The USDC stays pending so it can be withdrawn.
+    assert_eq!(v.get_pending(acc("stranger.near")).0, 100 * USDC);
+    env.call(&acc("stranger.near"), 0);
+    v.cancel_join();
+    assert_books(&v, Token::Near);
+    assert_books(&v, Token::Usdc);
+}
+
+#[test]
+fn unreadable_policy_refuses_the_join() {
+    let (mut v, env) = setup();
+    env.call(&usdc(), 0);
+    let _ = v.ft_on_transfer(acc("ada.near"), U128(100 * USDC), "join".into());
+    env.call(&acc("ada.near"), 10 * NEAR);
+    let _ = v.join();
+    env.call(&vault_id(), 0);
+    assert_eq!(v.complete_join(acc("ada.near"), 10 * NEAR, None), 0);
+    assert_eq!(v.get_balances().members, 0);
+}
+
+#[test]
+fn everyone_role_is_not_membership() {
+    let p = json!({ "roles": [{ "name": "all", "kind": "Everyone" }, { "name": "holders", "kind": { "Member": "1" } }] });
+    assert!(!is_member(&p, &acc("ada.near")));
+    assert!(is_member(&member_policy(), &acc("ada.near")));
+    assert!(!is_member(&json!({}), &acc("ada.near")));
+}
+
+#[test]
+fn spend_queued_between_join_and_callback_refuses_the_join() {
+    let (mut v, env) = five_members();
+    env.call(&usdc(), 0);
+    let _ = v.ft_on_transfer(acc("frank.near"), U128(100 * USDC), "join".into());
+    env.call(&acc("frank.near"), 10 * NEAR);
+    let _ = v.join();
+    // A spend lands before the policy callback runs.
+    queue(&mut v, &env, 1, "bayo.near", Token::Usdc, 300 * USDC, two_approvals());
+    env.call(&vault_id(), 0);
+    assert_eq!(v.complete_join(acc("frank.near"), 10 * NEAR, Some(&member_policy())), 0);
+    assert_eq!(v.get_shares(acc("frank.near")).0, 0);
 }
 
 #[test]

@@ -10,7 +10,7 @@ use near_sdk::{
 };
 
 mod checks;
-pub use checks::{check_proposal, ProposalCheck};
+pub use checks::{check_proposal, is_member, ProposalCheck};
 
 pub const ERR_NOT_DAO: &str = "ERR_NOT_DAO";
 pub const ERR_ALREADY_QUEUED: &str = "ERR_ALREADY_QUEUED";
@@ -31,11 +31,13 @@ pub const ERR_UNKNOWN_SPEND: &str = "ERR_UNKNOWN_SPEND";
 pub const ERR_NOTHING_TO_CLAIM: &str = "ERR_NOTHING_TO_CLAIM";
 pub const ERR_ZERO_AMOUNT: &str = "ERR_ZERO_AMOUNT";
 pub const ERR_BAD_RULES: &str = "ERR_BAD_RULES";
+pub const ERR_NOT_MEMBER: &str = "ERR_NOT_MEMBER";
 
 /// Fee on executed spends, in basis points (0.1%).
 pub const FEE_BPS: u128 = 10;
 const GAS_VIEW: Gas = Gas::from_tgas(10);
 const GAS_CALLBACK: Gas = Gas::from_tgas(15);
+const GAS_JOIN_CALLBACK: Gas = Gas::from_tgas(60);
 const GAS_FT_TRANSFER: Gas = Gas::from_tgas(10);
 const ONE_YOCTO: NearToken = NearToken::from_yoctonear(1);
 const EVENT_STANDARD: &str = "dissent";
@@ -144,6 +146,7 @@ struct Tally {
 #[allow(dead_code)]
 trait SputnikDao {
     fn get_proposal(&self, id: u64) -> Value;
+    fn get_policy(&self) -> Value;
 }
 
 #[ext_contract(ext_ft)]
@@ -165,6 +168,7 @@ trait SelfCallbacks {
         memo: String,
     ) -> u64;
     fn on_transfer(&mut self, account_id: AccountId, token: Token, amount: U128);
+    fn on_join_policy(&mut self, account_id: AccountId, near_in: U128) -> U128;
 }
 
 #[near(contract_state)]
@@ -237,22 +241,66 @@ impl Vault {
         PromiseOrValue::Value(U128(0))
     }
 
-    /// Step 2 of joining: attach NEAR; the pending USDC and the NEAR are matched to the fund's ratio.
+    /// Step 2 of joining: attach NEAR. The vault reads the DAO's policy to confirm the caller sits in
+    /// one of its member groups, then matches the pending USDC and the NEAR to the fund's ratio.
     #[payable]
-    pub fn join(&mut self) -> U128 {
+    pub fn join(&mut self) -> Promise {
         require!(self.queued_ids.is_empty(), ERR_WINDOW_OPEN);
         let account = env::predecessor_account_id();
         let near_in = env::attached_deposit().as_yoctonear();
         let usdc_in = self.pending_usdc.get(&account).copied().unwrap_or(0);
         require!(near_in > 0 || usdc_in > 0, ERR_EMPTY_DEPOSIT);
+        ext_dao::ext(self.dao.clone())
+            .with_static_gas(GAS_VIEW)
+            .get_policy()
+            .then(
+                ext_self::ext(env::current_account_id())
+                    .with_static_gas(GAS_JOIN_CALLBACK)
+                    .on_join_policy(account, U128(near_in)),
+            )
+    }
 
-        let (issued, near_used, usdc_used) =
-            join_math(self.total_shares, self.near_balance, self.usdc_balance, near_in, usdc_in)
-                .unwrap_or_else(|e| env::panic_str(e));
+    /// Finishes a join once the DAO's policy is known. Never panics: the attached NEAR is already
+    /// in the vault, so a refused join refunds it instead of failing.
+    #[private]
+    pub fn on_join_policy(
+        &mut self,
+        account_id: AccountId,
+        near_in: U128,
+        #[callback_result] policy: Result<Value, PromiseError>,
+    ) -> U128 {
+        U128(self.complete_join(account_id, near_in.0, policy.ok().as_ref()))
+    }
+
+    /// The second half of `join`. Returns the shares issued, or 0 if the join was refused and refunded.
+    pub(crate) fn complete_join(&mut self, account: AccountId, near_in: u128, policy: Option<&Value>) -> u128 {
+        self.near_tally.deposited += near_in;
+        let usdc_in = self.pending_usdc.get(&account).copied().unwrap_or(0);
+        let refused = if !policy.map(|p| is_member(p, &account)).unwrap_or(false) {
+            Some(ERR_NOT_MEMBER)
+        } else if !self.queued_ids.is_empty() {
+            Some(ERR_WINDOW_OPEN)
+        } else {
+            None
+        };
+        let math = match refused {
+            Some(e) => Err(e),
+            None => join_math(self.total_shares, self.near_balance, self.usdc_balance, near_in, usdc_in),
+        };
+        let (issued, near_used, usdc_used) = match math {
+            Ok(m) => m,
+            Err(reason) => {
+                // The USDC stays pending so the member can retry or call cancel_join.
+                if near_in > 0 {
+                    self.send(account.clone(), Token::Near, near_in, Some(Movement::Refund));
+                }
+                self.emit("join_refused", json!({ "account_id": account, "reason": reason, "near": U128(near_in) }));
+                return 0;
+            }
+        };
 
         self.pending_usdc.remove(&account);
         self.pending_total -= usdc_in;
-        self.near_tally.deposited += near_in;
         self.near_balance += near_used;
         self.usdc_balance += usdc_used;
         self.total_shares += issued;
@@ -271,7 +319,7 @@ impl Vault {
             "join",
             json!({ "account_id": account, "shares": U128(issued), "near": U128(near_used), "usdc": U128(usdc_used) }),
         );
-        U128(issued)
+        issued
     }
 
     /// Refunds a pending USDC deposit that never completed its join.
@@ -649,6 +697,8 @@ impl Vault {
             self.tally_mut(token).refunded += amount;
         }
         self.tally_mut(token).in_flight += amount;
+        #[cfg(test)]
+        SENT.with(|sent| sent.borrow_mut().push((to.clone(), token, amount)));
         let callback = ext_self::ext(env::current_account_id())
             .with_static_gas(GAS_CALLBACK)
             .on_transfer(to.clone(), token, U128(amount));
@@ -760,4 +810,12 @@ pub fn join_math(
 }
 
 #[cfg(test)]
+thread_local! {
+    /// Transfers started in a unit test, so the test can settle them as delivered or bounced.
+    pub(crate) static SENT: std::cell::RefCell<Vec<(AccountId, Token, u128)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod prop_tests;

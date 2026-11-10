@@ -195,7 +195,7 @@ impl World {
         )
         .await?
         .assert_success();
-        self.call(&who, &self.vault, "join", json!({}), near * 10u128.pow(24), 100).await?.assert_success();
+        self.call(&who, &self.vault, "join", json!({}), near * 10u128.pow(24), 150).await?.assert_success();
         Ok(())
     }
 
