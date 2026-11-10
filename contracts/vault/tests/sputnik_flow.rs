@@ -194,3 +194,58 @@ async fn non_member_join_is_refunded() -> R<()> {
     assert_books(&w.ledger("Near").await?);
     Ok(())
 }
+
+/// The agent's key: added by the member to their own account, limited to the vault's exit and
+/// cancel_spend methods, with no way to attach a deposit. The runtime itself refuses anything else,
+/// before the transaction is ever included.
+#[tokio::test]
+async fn agent_key_can_only_exit_or_cancel() -> R<()> {
+    use near_api::types::transaction::actions::{AccessKeyPermission, FunctionCallPermission};
+    let w = world().await?;
+    w.all_join().await?;
+    let ada = id(&w, "ada");
+
+    let agent_key = near_api::signer::generate_secret_key()?;
+    near_api::Account(ada.clone())
+        .add_key(
+            AccessKeyPermission::FunctionCall(FunctionCallPermission {
+                allowance: Some(near_api::NearToken::from_millinear(250)),
+                receiver_id: w.vault.account_id().to_string(),
+                method_names: vec!["exit".into(), "cancel_spend".into()],
+            }),
+            agent_key.public_key(),
+        )
+        .with_signer(w.signer.clone())
+        .send_to(&w.net)
+        .await?
+        .assert_success();
+    let agent = near_api::Signer::from_secret_key(agent_key)?;
+    let with_agent = |contract: &near_api::Contract, method: &str, args: near_sdk::serde_json::Value, deposit: u128| {
+        contract
+            .call_function(method, args)
+            .transaction()
+            .deposit(near_api::NearToken::from_yoctonear(deposit))
+            .gas(near_api::NearGas::from_tgas(100))
+            .with_signer(ada.clone(), agent.clone())
+    };
+
+    // Another contract: refused by the runtime.
+    let r = with_agent(&w.usdc, "ft_transfer", json!({ "receiver_id": id(&w, "bayo"), "amount": "1" }), 1).send_to(&w.net).await;
+    assert!(r.is_err(), "the key moved tokens on another contract");
+    // Another method on the vault: refused.
+    let r = with_agent(&w.vault, "set_rules", json!({ "rules": { "max_spend_share_bps": null, "new_recipient": false, "blocked_recipients": [] } }), 0)
+        .send_to(&w.net)
+        .await;
+    assert!(r.is_err(), "the key called a method outside its list");
+    // An allowed method with a deposit attached: refused.
+    let r = with_agent(&w.vault, "exit", json!({}), 1).send_to(&w.net).await;
+    assert!(r.is_err(), "the key attached a deposit");
+    assert_eq!(w.usdc_of(&ada).await?, 0, "nothing moved yet");
+
+    // The one thing it is for: exit, paying only Ada.
+    with_agent(&w.vault, "exit", json!({ "reason_hash": "note-sha256" }), 0).send_to(&w.net).await?.assert_success();
+    assert_eq!(w.usdc_of(&ada).await?, 100 * USDC);
+    let shares: near_sdk::json_types::U128 = w.view(&w.vault, "get_shares", json!({ "account_id": ada })).await?;
+    assert_eq!(shares.0, 0);
+    Ok(())
+}

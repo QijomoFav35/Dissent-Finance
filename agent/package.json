@@ -1,0 +1,15 @@
+{
+  "name": "dissent-exit-agent",
+  "version": "0.1.0",
+  "description": "Watches a vault's queued spends and exits for its member when a spend breaks the member's own rules.",
+  "type": "module",
+  "bin": { "exit-agent": "src/watch.js" },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "watch": "node src/watch.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "near-api-js": "7.4.0"
+  }
+}

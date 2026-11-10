@@ -431,7 +431,11 @@ fn run_everyone_leaves(joins: Vec<(usize, u128, u128)>) -> Result<(), TestCaseEr
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig { cases: 256, ..ProptestConfig::default() })]
+    // PROPTEST_CASES=32 for quick runs while building; the default 256 before each commit.
+    #![proptest_config(ProptestConfig {
+        cases: std::env::var("PROPTEST_CASES").ok().and_then(|v| v.parse().ok()).unwrap_or(256),
+        ..ProptestConfig::default()
+    })]
 
     #[test]
     fn invariants_hold_after_every_step(ops in proptest::collection::vec(op(), 1..80)) {
