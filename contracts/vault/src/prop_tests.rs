@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 const WINDOW: u64 = 600 * 1_000_000_000;
-const NAMES: [&str; 7] = ["ada.near", "bayo.near", "chi.near", "dayo.near", "efe.near", "frank.near", "stranger.near"];
+const NAMES: [&str; 7] = ["alice.near", "ben.near", "cara.near", "dan.near", "emma.near", "frank.near", "stranger.near"];
 const MEMBERS: usize = 6; // the first six are in the DAO's council group; "stranger" is not
 const OTHERS: [&str; 2] = ["shop.near", "fee.near"];
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The watcher: polls the vault and runs the exit agent for each member in the config.
 //
-//   node src/watch.js agent.config.json --member ada.near
+//   node src/watch.js agent.config.json --member alice.near
 //
 // Start one watcher per member, each with only that member's key in its environment.
 //
@@ -11,7 +11,7 @@
 //     "rpc": ["https://free.rpc.fastnear.com", "https://rpc.intea.rs"],
 //     "interval_sec": 15,
 //     "notes_dir": "notes",
-//     "members": [{ "account_id": "ada.near", "key_env": "ADA_AGENT_KEY" }]
+//     "members": [{ "account_id": "alice.near", "key_env": "ALICE_AGENT_KEY" }]
 //   }
 //
 // Each member's key is read from the named environment variable, never from the config file.

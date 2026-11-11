@@ -8,7 +8,7 @@ use near_sdk::serde_json::{self, json, Value};
 use std::sync::Arc;
 
 pub const USDC: u128 = 1_000_000;
-pub const MEMBERS: [&str; 5] = ["ada", "bayo", "chi", "dayo", "efe"];
+pub const MEMBERS: [&str; 5] = ["alice", "ben", "cara", "dan", "emma"];
 pub const WINDOW_NS: u64 = 60 * 1_000_000_000;
 pub const PROPOSAL_BOND: u128 = 100_000_000_000_000_000_000_000; // 0.1 NEAR
 
@@ -136,7 +136,7 @@ pub async fn world() -> R<World> {
 
     // The vault, the shop and the fee account must hold USDC storage to receive it.
     for holder in [w.vault.account_id().clone(), w.fee.clone(), w.shop.clone()] {
-        w.call(&id(&w, "ada"), &w.usdc, "storage_deposit", json!({ "account_id": holder }), 12_500_000_000_000_000_000_000, 30)
+        w.call(&id(&w, "alice"), &w.usdc, "storage_deposit", json!({ "account_id": holder }), 12_500_000_000_000_000_000_000, 30)
             .await?
             .assert_success();
     }

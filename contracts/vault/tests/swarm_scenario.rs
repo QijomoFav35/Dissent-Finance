@@ -30,12 +30,12 @@ fn agent_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../agent")
 }
 
-/// The README rules. Bayo and Chi will approve, so their agents must stay whatever their rules say.
+/// The README rules. Ben and Cara will approve, so their agents must stay whatever their rules say.
 fn rules_for(name: &str, w: &World) -> Value {
     match name {
-        "ada" => json!({ "max_spend_share_bps": 2000, "new_recipient": false, "blocked_recipients": [] }),
-        "dayo" => json!({ "max_spend_share_bps": null, "new_recipient": true, "blocked_recipients": [] }),
-        "efe" => json!({ "max_spend_share_bps": null, "new_recipient": false, "blocked_recipients": [id(w, "bayo")] }),
+        "alice" => json!({ "max_spend_share_bps": 2000, "new_recipient": false, "blocked_recipients": [] }),
+        "dan" => json!({ "max_spend_share_bps": null, "new_recipient": true, "blocked_recipients": [] }),
+        "emma" => json!({ "max_spend_share_bps": null, "new_recipient": false, "blocked_recipients": [id(w, "ben")] }),
         _ => json!({ "max_spend_share_bps": 1000, "new_recipient": false, "blocked_recipients": [] }),
     }
 }
@@ -103,12 +103,12 @@ async fn five_agents_leave_and_kill_the_spend_on_their_own() -> R<()> {
     }
     println!("agent logs and notes: {}", dir.display());
 
-    // Bayo and Chi approve 300 of the fund's 500 USDC to Bayo. From here on nobody acts by hand.
-    let bayo = id(&w, "bayo");
-    let args = w.spend_args(w.last_proposal_id().await?, &bayo, w.usdc.account_id().as_str(), 300 * USDC);
-    let (pid, kind) = w.propose("bayo", &args).await?;
-    w.vote("bayo", pid, &kind, "VoteApprove").await?;
-    w.vote("chi", pid, &kind, "VoteApprove").await?;
+    // Ben and Cara approve 300 of the fund's 500 USDC to Ben. From here on nobody acts by hand.
+    let ben = id(&w, "ben");
+    let args = w.spend_args(w.last_proposal_id().await?, &ben, w.usdc.account_id().as_str(), 300 * USDC);
+    let (pid, kind) = w.propose("ben", &args).await?;
+    w.vote("ben", pid, &kind, "VoteApprove").await?;
+    w.vote("cara", pid, &kind, "VoteApprove").await?;
     let open = w.open_spends().await?;
     assert_eq!(open.len(), 1, "spend should be queued: {open:?}");
     let spend_id = open[0]["id"].as_u64().unwrap();
@@ -143,10 +143,10 @@ async fn five_agents_leave_and_kill_the_spend_on_their_own() -> R<()> {
     println!("exited: {exited:?}");
     assert!(exited.len() >= 2, "at least two members must leave to make 300 of 500 unpayable");
     for m in &exited {
-        assert!(["ada", "dayo", "efe"].contains(m), "{m} approved and must not have left");
+        assert!(["alice", "dan", "emma"].contains(m), "{m} approved and must not have left");
         assert_eq!(w.usdc_of(&id(&w, m)).await?, 100 * USDC, "{m} gets exactly a fifth of the USDC");
     }
-    assert_eq!(w.usdc_of(&bayo).await?, 0, "Bayo received nothing");
+    assert_eq!(w.usdc_of(&ben).await?, 0, "Ben received nothing");
     assert_eq!(u(&w.balances().await?["usdc"]), 500 * USDC - 100 * USDC * exited.len() as u128);
 
     // Every exit carried the hash of the note its agent published, and the note says why.
@@ -159,7 +159,7 @@ async fn five_agents_leave_and_kill_the_spend_on_their_own() -> R<()> {
         let hash = published["hash"].as_str().unwrap();
         assert!(record.contains(hash), "{m}'s exit on chain does not carry the published note hash {hash}");
     }
-    for m in ["bayo", "chi"] {
+    for m in ["ben", "cara"] {
         let path = notes.join(format!("{spend_id}-{}.json", id(&w, m)));
         let published: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
         assert_eq!(published["note"]["decision"], "stay", "{m} approved, so their agent stays");
@@ -167,7 +167,7 @@ async fn five_agents_leave_and_kill_the_spend_on_their_own() -> R<()> {
 
     // The spend can never pay out now.
     w.wait_out_window().await?;
-    w.call(&bayo, &w.vault, "execute_spend", json!({ "spend_id": spend_id }), 0, 100).await?.assert_failure();
+    w.call(&ben, &w.vault, "execute_spend", json!({ "spend_id": spend_id }), 0, 100).await?.assert_failure();
     assert_books(&w.ledger("Usdc").await?);
     assert_books(&w.ledger("Near").await?);
     Ok(())

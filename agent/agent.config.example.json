@@ -1,9 +1,7 @@
 {
   "vault": "vault.example.near",
-  "rpc": ["https://free.rpc.fastnear.com", "https://rpc.intea.rs", "https://near.blockpi.network/v1/rpc/public"],
+  "rpc": ["https://free.rpc.fastnear.com", "https://rpc.intea.rs"],
   "interval_sec": 15,
   "notes_dir": "notes",
-  "members": [
-    { "account_id": "ada.near", "key_env": "ADA_AGENT_KEY" }
-  ]
+  "members": [{ "account_id": "alice.near", "key_env": "ALICE_AGENT_KEY" }]
 }

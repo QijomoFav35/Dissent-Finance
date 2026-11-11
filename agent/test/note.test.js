@@ -5,8 +5,8 @@ import { canonical, hashNote, makeNote, verifyNote } from "../src/note.js";
 const base = () =>
   makeNote({
     vault: "vault.near",
-    member: "ada.near",
-    spend: { id: 0, proposal_id: 3, recipient: "bayo.near", token: "Usdc", amount: "300000000", window_ends: "1" },
+    member: "alice.near",
+    spend: { id: 0, proposal_id: 3, recipient: "ben.near", token: "Usdc", amount: "300000000", window_ends: "1" },
     balances: { near: "50", usdc: "500000000" },
     rules: { max_spend_share_bps: 2000 },
     result: { decision: "exit", checks: [{ rule: "max_spend_share_bps", limit: 2000, value: 6000, broken: true }] },

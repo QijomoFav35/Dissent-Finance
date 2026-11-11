@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { evaluate, spendShareBps, unaffordable } from "../src/rules.js";
 
 const fund = (usdc, near = "0") => ({ balances: { near, usdc: String(usdc) }, recipientPaidBefore: true });
-const spend = (amount, extra = {}) => ({ id: 0, proposal_id: 0, recipient: "bayo.near", token: "Usdc", amount: String(amount), approvers: [], ...extra });
+const spend = (amount, extra = {}) => ({ id: 0, proposal_id: 0, recipient: "ben.near", token: "Usdc", amount: String(amount), approvers: [], ...extra });
 
 test("share of the fund is computed in basis points, rounded up", () => {
   assert.equal(spendShareBps(spend(300), fund(500).balances), 6000n);
@@ -16,7 +16,7 @@ test("NEAR spends are measured against the NEAR balance", () => {
   assert.equal(spendShareBps(s, { near: "50", usdc: "1" }), 1000n);
 });
 
-test("Ada's rule: leave if a spend takes more than 20% of the fund", () => {
+test("Alice's rule: leave if a spend takes more than 20% of the fund", () => {
   const r = evaluate(spend(300), { max_spend_share_bps: 2000 }, fund(500));
   assert.equal(r.decision, "exit");
   assert.deepEqual(r.checks[0], { rule: "max_spend_share_bps", limit: 2000, value: 6000, broken: true });
@@ -34,7 +34,7 @@ test("new recipient rule", () => {
 });
 
 test("blocked recipients", () => {
-  const rules = { blocked_recipients: ["bayo.near", "mallory.near"] };
+  const rules = { blocked_recipients: ["ben.near", "mallory.near"] };
   assert.equal(evaluate(spend(1), rules, fund(500)).decision, "exit");
   assert.equal(evaluate(spend(1, { recipient: "shop.near" }), rules, fund(500)).decision, "stay");
 });
