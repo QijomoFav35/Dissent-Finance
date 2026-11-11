@@ -5,6 +5,8 @@ import { evaluate, unaffordable } from "./rules.js";
 import { hashNote, makeNote } from "./note.js";
 
 export const MAX_ATTEMPTS = 3;
+// Contract answers to cancel_spend that mean another member's agent already settled the spend.
+const SETTLED = /ERR_ALREADY_EXECUTED|ERR_SPEND_AFFORDABLE/;
 
 export class ExitAgent {
   /**
@@ -56,7 +58,7 @@ export class ExitAgent {
           const r = await caller.cancelSpend(spend.id);
           if (r?.ok === false) {
             // Another member's agent got there first: the spend is already settled, nothing left to do.
-            if (/ERR_ALREADY_EXECUTED|ERR_SPEND_AFFORDABLE/.test(JSON.stringify(r.failure))) {
+            if (SETTLED.test(JSON.stringify(r.failure))) {
               this.store.put(key, { tx: null, at: this.now(), by: "another member" });
               continue;
             }
@@ -66,7 +68,12 @@ export class ExitAgent {
           done.cancelled.push({ spend: spend.id, tx: r?.hash ?? null });
           this.log(`cancelled spend ${spend.id}`);
         } catch (e) {
-          done.errors.push({ spend: spend.id, action: "cancel", error: String(e?.message ?? e) });
+          const msg = String(e?.message ?? e);
+          if (SETTLED.test(msg)) {
+            this.store.put(key, { tx: null, at: this.now(), by: "another member" });
+            continue;
+          }
+          done.errors.push({ spend: spend.id, action: "cancel", error: msg });
         }
       }
     }
