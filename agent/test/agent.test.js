@@ -164,3 +164,25 @@ test("several open spends are each judged against the fund as it stands", async 
     [1, "exit"],
   ]);
 });
+
+test("five separate agents, each with only its own key, reach the same outcome", async () => {
+  const { vault } = story();
+  const id = vault.queue({ recipient: "bayo.near", token: "Usdc", amount: 300n * USDC, approvers: ["bayo.near", "chi.near"] });
+  const agents = FIVE.map(
+    (a) =>
+      new ExitAgent({
+        vaultId: "vault.near",
+        reader: vault,
+        members: [{ accountId: a, caller: vault.callerFor(a) }],
+        store: new MemoryStore(),
+      }),
+  );
+  for (const agent of agents) await agent.tick();
+  assert.equal(vault.spends[id].status, "Cancelled");
+  // Ada and Dayo leave; once the fund is down to 300 the spend is dead, so Efe's agent never has to exit.
+  assert.equal(vault.usdc, 300n * USDC);
+  assert.equal(vault.calls.filter((c) => c.method === "cancel_spend").length, 1);
+  // Nobody ever called with another member's key.
+  for (const c of vault.calls) assert.ok(FIVE.includes(c.account));
+  assert.deepEqual([...vault.holdings.keys()].sort(), ["bayo.near", "chi.near", "efe.near"]);
+});

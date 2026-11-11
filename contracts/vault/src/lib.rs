@@ -14,6 +14,7 @@ pub use checks::{check_proposal, is_member, ProposalCheck};
 
 pub const ERR_NOT_DAO: &str = "ERR_NOT_DAO";
 pub const ERR_ALREADY_QUEUED: &str = "ERR_ALREADY_QUEUED";
+pub const ERR_APPROVER_NOT_HOLDER: &str = "ERR_APPROVER_NOT_HOLDER";
 pub const ERR_PROPOSAL_MISMATCH: &str = "ERR_PROPOSAL_MISMATCH";
 pub const ERR_WINDOW_OPEN: &str = "ERR_WINDOW_OPEN";
 pub const ERR_WINDOW_NOT_CLOSED: &str = "ERR_WINDOW_NOT_CLOSED";
@@ -661,6 +662,10 @@ impl Vault {
             return Err(ERR_ALREADY_QUEUED);
         }
         let check = check_proposal(proposal, &env::current_account_id(), "queue_spend", raw_args)?;
+        // Approvers who hold no shares cannot be bound by the exit rule, so their approval does not count.
+        if check.approvers.iter().any(|a| self.shares.get(a).copied().unwrap_or(0) == 0) {
+            return Err(ERR_APPROVER_NOT_HOLDER);
+        }
         let now = env::block_timestamp();
         let id = self.spends.len() as u64;
         let spend = Spend {

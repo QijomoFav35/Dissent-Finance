@@ -414,6 +414,17 @@ fn the_same_proposal_cannot_be_queued_twice() {
     assert_eq!(r, Err(ERR_ALREADY_QUEUED));
 }
 
+#[test]
+fn a_spend_approved_by_someone_with_no_shares_is_refused() {
+    let (mut v, _env) = five_members();
+    let approvals = json!({ "bayo.near": "Approve", "ghost.near": "Approve" });
+    let args = spend_args(9, "bayo.near", "usdc.near", 10 * USDC);
+    let p = proposal("Approved", "vault.near", "queue_spend", &args, approvals);
+    let r = v.record_spend(&args, &p, 9, acc("bayo.near"), Token::Usdc, U128(10 * USDC), "spend".into());
+    assert_eq!(r, Err(ERR_APPROVER_NOT_HOLDER));
+    assert!(v.get_open_spends().is_empty());
+}
+
 // ---------- exits ----------
 
 #[test]

@@ -54,7 +54,14 @@ export class ExitAgent {
         if (!caller) continue;
         try {
           const r = await caller.cancelSpend(spend.id);
-          if (r?.ok === false) throw new Error(`cancel failed: ${JSON.stringify(r.failure)}`);
+          if (r?.ok === false) {
+            // Another member's agent got there first: the spend is already settled, nothing left to do.
+            if (/ERR_ALREADY_EXECUTED|ERR_SPEND_AFFORDABLE/.test(JSON.stringify(r.failure))) {
+              this.store.put(key, { tx: null, at: this.now(), by: "another member" });
+              continue;
+            }
+            throw new Error(`cancel failed: ${JSON.stringify(r.failure)}`);
+          }
           this.store.put(key, { tx: r?.hash ?? null, at: this.now() });
           done.cancelled.push({ spend: spend.id, tx: r?.hash ?? null });
           this.log(`cancelled spend ${spend.id}`);
