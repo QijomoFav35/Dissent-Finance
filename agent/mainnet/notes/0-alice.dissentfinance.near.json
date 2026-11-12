@@ -1,0 +1,37 @@
+{
+  "hash": "6bf6e2930e3bbfc9bd3cef6b965027835884a01a0f10d228b356a252ce224275",
+  "note": {
+    "v": 1,
+    "agent": "dissent-exit-agent/0.1.0",
+    "vault": "vault.dissentfinance.near",
+    "member": "alice.dissentfinance.near",
+    "spend": {
+      "id": 0,
+      "proposal_id": 0,
+      "recipient": "ben.dissentfinance.near",
+      "token": "Usdc",
+      "amount": "600000",
+      "window_ends": "1794432072099800003"
+    },
+    "fund": {
+      "near": "500000000000000000000000",
+      "usdc": "1000000"
+    },
+    "rules": {
+      "max_spend_share_bps": 2000,
+      "new_recipient": false,
+      "blocked_recipients": []
+    },
+    "approved_by_member": false,
+    "checks": [
+      {
+        "rule": "max_spend_share_bps",
+        "limit": 2000,
+        "value": 6000,
+        "broken": true
+      }
+    ],
+    "decision": "exit",
+    "at": "2026-11-11T21:11:29.576Z"
+  }
+}
