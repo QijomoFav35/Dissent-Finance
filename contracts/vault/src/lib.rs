@@ -14,7 +14,11 @@ pub use checks::{check_proposal, is_member, ProposalCheck};
 
 pub const ERR_NOT_DAO: &str = "ERR_NOT_DAO";
 pub const ERR_ALREADY_QUEUED: &str = "ERR_ALREADY_QUEUED";
-pub const ERR_APPROVER_NOT_HOLDER: &str = "ERR_APPROVER_NOT_HOLDER";
+pub const ERR_NO_HOLDER_APPROVED: &str = "ERR_NO_HOLDER_APPROVED";
+pub const ERR_STORAGE: &str = "ERR_STORAGE";
+pub const ERR_MEMO_TOO_LONG: &str = "ERR_MEMO_TOO_LONG";
+pub const ERR_TOO_MANY_OPEN: &str = "ERR_TOO_MANY_OPEN";
+pub const ERR_DEPOSIT_TOO_SMALL: &str = "ERR_DEPOSIT_TOO_SMALL";
 pub const ERR_PROPOSAL_MISMATCH: &str = "ERR_PROPOSAL_MISMATCH";
 pub const ERR_WINDOW_OPEN: &str = "ERR_WINDOW_OPEN";
 pub const ERR_WINDOW_NOT_CLOSED: &str = "ERR_WINDOW_NOT_CLOSED";
@@ -36,13 +40,24 @@ pub const ERR_NOT_MEMBER: &str = "ERR_NOT_MEMBER";
 
 /// Fee on executed spends, in basis points (0.1%).
 pub const FEE_BPS: u128 = 10;
+/// Smallest USDC deposit accepted toward a join (0.1 USDC). Makes filling the vault's storage
+/// with pending deposits cost real money that stays locked while it lasts.
+pub const MIN_JOIN_USDC: u128 = 100_000;
+/// Longest memo a spend may carry, in bytes.
+pub const MAX_MEMO: usize = 256;
+/// Most spends that may be open at once, so agents can always read them and exits stay cheap.
+pub const MAX_OPEN_SPENDS: usize = 8;
+/// Storage the vault keeps free for the events that must always succeed: exits, cancels,
+/// executes and claims. A base amount plus room per member.
+const RESERVE_BASE_BYTES: u64 = 4_096;
+const RESERVE_PER_MEMBER_BYTES: u64 = 1_024;
 const GAS_VIEW: Gas = Gas::from_tgas(10);
 const GAS_CALLBACK: Gas = Gas::from_tgas(15);
 const GAS_JOIN_CALLBACK: Gas = Gas::from_tgas(60);
 const GAS_FT_TRANSFER: Gas = Gas::from_tgas(10);
 const ONE_YOCTO: NearToken = NearToken::from_yoctonear(1);
 const EVENT_STANDARD: &str = "dissent";
-const EVENT_VERSION: &str = "1.0.0";
+const EVENT_VERSION: &str = "2.0.0";
 
 #[derive(BorshStorageKey)]
 #[near]
@@ -168,7 +183,7 @@ trait SelfCallbacks {
         amount: U128,
         memo: String,
     ) -> u64;
-    fn on_transfer(&mut self, account_id: AccountId, token: Token, amount: U128);
+    fn on_transfer(&mut self, account_id: AccountId, token: Token, amount: U128, payment: bool);
     fn on_join_policy(&mut self, account_id: AccountId, near_in: U128) -> U128;
 }
 
@@ -195,6 +210,9 @@ pub struct Vault {
     record: Vector<String>,
     near_tally: Tally,
     usdc_tally: Tally,
+    /// NEAR attached to joins whose DAO check has not come back yet. It sits in the account
+    /// balance and belongs to the joiner until the callback settles it.
+    joining_near: u128,
 }
 
 #[near]
@@ -223,6 +241,7 @@ impl Vault {
             record: Vector::new(Key::Record),
             near_tally: Tally::default(),
             usdc_tally: Tally::default(),
+            joining_near: 0,
         }
     }
 
@@ -231,14 +250,16 @@ impl Vault {
     /// NEP-141 receiver. Step 1 of joining: USDC sent with msg "join" becomes a pending deposit.
     pub fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128> {
         require!(env::predecessor_account_id() == self.usdc, ERR_WRONG_TOKEN);
-        if msg != "join" || amount.0 == 0 {
+        if msg != "join" || amount.0 < MIN_JOIN_USDC {
             return PromiseOrValue::Value(amount);
         }
         let prev = self.pending_usdc.get(&sender_id).copied().unwrap_or(0);
         self.pending_usdc.insert(sender_id.clone(), prev + amount.0);
         self.pending_total += amount.0;
         self.usdc_tally.deposited += amount.0;
-        self.emit("pending_deposit", json!({ "account_id": sender_id, "usdc": amount }));
+        self.log_only("pending_deposit", json!({ "account_id": sender_id, "usdc": amount }));
+        // Panicking makes the token contract return the USDC to the sender.
+        require!(self.storage_ok(0), ERR_STORAGE);
         PromiseOrValue::Value(U128(0))
     }
 
@@ -251,6 +272,9 @@ impl Vault {
         let near_in = env::attached_deposit().as_yoctonear();
         let usdc_in = self.pending_usdc.get(&account).copied().unwrap_or(0);
         require!(near_in > 0 || usdc_in > 0, ERR_EMPTY_DEPOSIT);
+        // Room for one more member's entries, checked before anything is promised.
+        self.joining_near += near_in;
+        require!(self.storage_ok(RESERVE_PER_MEMBER_BYTES), ERR_STORAGE);
         ext_dao::ext(self.dao.clone())
             .with_static_gas(GAS_VIEW)
             .get_policy()
@@ -275,6 +299,7 @@ impl Vault {
 
     /// The second half of `join`. Returns the shares issued, or 0 if the join was refused and refunded.
     pub(crate) fn complete_join(&mut self, account: AccountId, near_in: u128, policy: Option<&Value>) -> u128 {
+        self.joining_near = self.joining_near.saturating_sub(near_in);
         self.near_tally.deposited += near_in;
         let usdc_in = self.pending_usdc.get(&account).copied().unwrap_or(0);
         let refused = if !policy.map(|p| is_member(p, &account)).unwrap_or(false) {
@@ -295,7 +320,7 @@ impl Vault {
                 if near_in > 0 {
                     self.send(account.clone(), Token::Near, near_in, Some(Movement::Refund));
                 }
-                self.emit("join_refused", json!({ "account_id": account, "reason": reason, "near": U128(near_in) }));
+                self.log_only("join_refused", json!({ "account_id": account, "reason": reason, "near": U128(near_in) }));
                 return 0;
             }
         };
@@ -330,7 +355,7 @@ impl Vault {
         require!(amount > 0, ERR_NO_PENDING_DEPOSIT);
         self.pending_total -= amount;
         self.send(account.clone(), Token::Usdc, amount, Some(Movement::Refund));
-        self.emit("cancel_join", json!({ "account_id": account, "usdc": U128(amount) }));
+        self.log_only("cancel_join", json!({ "account_id": account, "usdc": U128(amount) }));
     }
 
     // ---------- spends ----------
@@ -348,6 +373,8 @@ impl Vault {
         require!(env::predecessor_account_id() == self.dao, ERR_NOT_DAO);
         require!(!self.by_proposal.contains_key(&proposal_id), ERR_ALREADY_QUEUED);
         require!(amount.0 > 0, ERR_ZERO_AMOUNT);
+        require!(memo.as_ref().map(|m| m.len() <= MAX_MEMO).unwrap_or(true), ERR_MEMO_TOO_LONG);
+        require!(self.queued_ids.len() < MAX_OPEN_SPENDS, ERR_TOO_MANY_OPEN);
         let token = self.token_from_id(&token_id);
         let raw = env::input().unwrap_or_default();
         ext_dao::ext(self.dao.clone())
@@ -397,9 +424,9 @@ impl Vault {
         spend.status = SpendStatus::Executed;
         self.spends.replace(spend_id as u32, spend.clone());
         self.queued_ids.retain(|id| *id != spend_id);
-        self.paid.insert(spend.recipient.clone());
 
-        self.send(spend.recipient.clone(), spend.token, spend.amount.0, None);
+        // The receiver counts as paid only once the transfer lands (see settle_transfer).
+        self.send(spend.recipient.clone(), spend.token, spend.amount.0, Some(Movement::Payment));
         if fee > 0 {
             self.send(self.fee_account.clone(), spend.token, fee, None);
         }
@@ -412,7 +439,11 @@ impl Vault {
     /// Anyone: cancels a queued spend the fund can no longer pay after exits.
     pub fn cancel_spend(&mut self, spend_id: u64) {
         let mut spend = self.spend_or_panic(spend_id);
-        require!(spend.status == SpendStatus::Queued, ERR_ALREADY_EXECUTED);
+        match spend.status {
+            SpendStatus::Executed => env::panic_str(ERR_ALREADY_EXECUTED),
+            SpendStatus::Cancelled => env::panic_str(ERR_SPEND_CANCELLED),
+            SpendStatus::Queued => {}
+        }
         require!(!self.affordable(&spend), ERR_SPEND_AFFORDABLE);
         spend.status = SpendStatus::Cancelled;
         self.spends.replace(spend_id as u32, spend);
@@ -467,9 +498,9 @@ impl Vault {
     }
 
     #[private]
-    pub fn on_transfer(&mut self, account_id: AccountId, token: Token, amount: U128) {
+    pub fn on_transfer(&mut self, account_id: AccountId, token: Token, amount: U128, payment: bool) {
         let ok = matches!(env::promise_result_checked(0, 64), Ok(_));
-        self.settle_transfer(account_id, token, amount.0, ok);
+        self.settle_payment(account_id, token, amount.0, ok, payment);
     }
 
     /// Stores the caller's exit rules where their agent and anyone else can read them.
@@ -481,7 +512,8 @@ impl Vault {
         }
         require!(rules.blocked_recipients.len() <= 50, ERR_BAD_RULES);
         self.rules.insert(account.clone(), rules.clone());
-        self.emit("set_rules", json!({ "account_id": account, "rules": rules }));
+        self.log_only("set_rules", json!({ "account_id": account, "rules": rules }));
+        require!(self.storage_ok(0), ERR_STORAGE);
     }
 
     // ---------- views ----------
@@ -585,6 +617,8 @@ impl Vault {
 #[derive(Clone, Copy)]
 enum Movement {
     Refund,
+    /// A spend paid out to its recipient: marks the recipient as paid once it lands.
+    Payment,
 }
 
 impl Vault {
@@ -662,9 +696,15 @@ impl Vault {
             return Err(ERR_ALREADY_QUEUED);
         }
         let check = check_proposal(proposal, &env::current_account_id(), "queue_spend", raw_args)?;
-        // Approvers who hold no shares cannot be bound by the exit rule, so their approval does not count.
-        if check.approvers.iter().any(|a| self.shares.get(a).copied().unwrap_or(0) == 0) {
-            return Err(ERR_APPROVER_NOT_HOLDER);
+        if self.queued_ids.len() >= MAX_OPEN_SPENDS {
+            return Err(ERR_TOO_MANY_OPEN);
+        }
+        // Approvals count only from accounts that hold shares: only they are bound by the exit rule.
+        // A council member who holds nothing can neither push a spend through nor block one.
+        let approvers: Vec<AccountId> =
+            check.approvers.into_iter().filter(|a| self.shares.get(a).copied().unwrap_or(0) > 0).collect();
+        if approvers.is_empty() {
+            return Err(ERR_NO_HOLDER_APPROVED);
         }
         let now = env::block_timestamp();
         let id = self.spends.len() as u64;
@@ -675,7 +715,7 @@ impl Vault {
             token,
             amount,
             memo,
-            approvers: check.approvers,
+            approvers,
             objectors: check.objectors,
             queued_at: U64(now),
             window_ends: U64(now + self.window_ns),
@@ -692,6 +732,9 @@ impl Vault {
                 "window_ends": spend.window_ends
             }),
         );
+        if !self.storage_ok(0) {
+            return Err(ERR_STORAGE);
+        }
         Ok(id)
     }
 
@@ -706,7 +749,7 @@ impl Vault {
         SENT.with(|sent| sent.borrow_mut().push((to.clone(), token, amount)));
         let callback = ext_self::ext(env::current_account_id())
             .with_static_gas(GAS_CALLBACK)
-            .on_transfer(to.clone(), token, U128(amount));
+            .on_transfer(to.clone(), token, U128(amount), matches!(movement, Some(Movement::Payment)));
         match token {
             Token::Near => {
                 Promise::new(to).transfer(NearToken::from_yoctonear(amount)).then(callback).detach();
@@ -722,6 +765,14 @@ impl Vault {
         }
     }
 
+    /// Settles a transfer and, for a spend's payment that landed, marks the receiver as paid.
+    pub(crate) fn settle_payment(&mut self, account: AccountId, token: Token, amount: u128, ok: bool, payment: bool) {
+        if ok && payment {
+            self.paid.insert(account.clone());
+        }
+        self.settle_transfer(account, token, amount, ok);
+    }
+
     pub(crate) fn settle_transfer(&mut self, account: AccountId, token: Token, amount: u128, ok: bool) {
         self.tally_mut(token).in_flight -= amount;
         if ok {
@@ -735,6 +786,30 @@ impl Vault {
         let prev = map.get(&account).copied().unwrap_or(0);
         map.insert(account.clone(), prev + amount);
         self.emit("claimable", json!({ "account_id": account, "token": token, "amount": U128(amount) }));
+    }
+
+    /// True when the account can pay for its storage, plus the reserve kept for exits and cancels,
+    /// without touching a single unit of NEAR it owes to members, joiners or claimants.
+    pub(crate) fn storage_ok(&self, extra_bytes: u64) -> bool {
+        let reserve = RESERVE_BASE_BYTES + RESERVE_PER_MEMBER_BYTES * self.shares.len() as u64 + extra_bytes;
+        let bytes = env::storage_usage() + reserve;
+        let needed = env::storage_byte_cost().as_yoctonear() * bytes as u128;
+        let owed = self.near_balance + self.near_tally.claimable + self.joining_near;
+        env::account_balance().as_yoctonear() >= needed.saturating_add(owed)
+    }
+
+    /// An event written to the transaction log only. Used for actions anyone can trigger, so they
+    /// cannot grow the vault's stored record.
+    fn log_only(&self, event: &str, data: Value) {
+        let line = json!({
+            "standard": EVENT_STANDARD,
+            "version": EVENT_VERSION,
+            "event": event,
+            "data": [data],
+            "block": U64(env::block_height()),
+            "ts": U64(env::block_timestamp()),
+        });
+        env::log_str(&format!("EVENT_JSON:{}", serde_json::to_string(&line).unwrap_or_default()));
     }
 
     fn emit(&mut self, event: &str, data: Value) {

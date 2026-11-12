@@ -12,7 +12,9 @@ export const USDC = "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36
 export const FACTORY = "sputnik-dao.near";
 export const DAO_NAME = process.env.DISSENT_DAO_NAME || "dissentfinance";
 export const DAO = `${DAO_NAME}.${FACTORY}`;
-export const VAULT = `vault.${ROOT}`;
+// v1 ("vault") ran the first live story and is keyless with known limits; v2 ("vault2") has the fixes.
+export const VAULT_NAME = process.env.DISSENT_VAULT || "vault2";
+export const VAULT = `${VAULT_NAME}.${ROOT}`;
 export const MEMBERS = ["alice", "ben", "cara", "dan", "emma"];
 export const member = (m) => `${m}.${ROOT}`;
 
@@ -22,7 +24,8 @@ export const USDC_STORAGE = 1_250_000_000_000_000_000_000n; // 0.00125 NEAR, the
 export const PROPOSAL_BOND = milli(10); // 0.01 NEAR, returned when the proposal passes
 
 const CRED = path.join(os.homedir(), ".near-credentials");
-export const AGENT_KEYS = path.join(CRED, "dissent-agents");
+// Agent keys are bound to one vault, so each vault has its own folder (v1 kept the original path).
+export const AGENT_KEYS = VAULT_NAME === "vault" ? path.join(CRED, "dissent-agents") : path.join(CRED, "dissent-agents", VAULT_NAME);
 export const rpc = new Rpc(RPCS, { tries: 10, timeoutMs: 20_000 });
 // Transactions go through every endpoint in turn: if one fails or rate-limits, the same signed
 // transaction goes to the next, so a fallback can never pay twice.

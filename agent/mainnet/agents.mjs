@@ -7,10 +7,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { VAULT, RPCS, MEMBERS, member, AGENT_KEYS, log } from "./lib.mjs";
+import { VAULT, VAULT_NAME, RPCS, MEMBERS, member, AGENT_KEYS, log } from "./lib.mjs";
 
 const here = path.dirname(new URL(import.meta.url).pathname);
-const config = path.join(here, "agents.json");
+const config = path.join(here, VAULT_NAME === "vault" ? "agents.json" : `agents-${VAULT_NAME}.json`);
+// Spend ids start at 0 in every vault, so each vault keeps its notes in its own folder.
+const notesDir = VAULT_NAME === "vault" ? path.join(here, "notes") : path.join(here, "notes", VAULT_NAME);
 fs.writeFileSync(
   config,
   JSON.stringify(
@@ -18,7 +20,7 @@ fs.writeFileSync(
       vault: VAULT,
       rpc: RPCS,
       interval_sec: Number(process.env.DISSENT_INTERVAL_SEC || 3),
-      notes_dir: path.join(here, "notes"),
+      notes_dir: notesDir,
       members: MEMBERS.map((m) => ({ account_id: member(m), key_env: "AGENT_KEY" })),
     },
     null,
@@ -46,7 +48,7 @@ for (const m of MEMBERS) {
   child.on("exit", (code) => log(`${m}'s agent stopped (${code})`));
   children.push(child);
 }
-log(`five agents watching ${VAULT}. Notes go to ${path.join(here, "notes")}. Ctrl+C to stop.`);
+log(`five agents watching ${VAULT}. Notes go to ${notesDir}. Ctrl+C to stop.`);
 process.on("SIGINT", () => {
   for (const c of children) c.kill();
   process.exit(0);

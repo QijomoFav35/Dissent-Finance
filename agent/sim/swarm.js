@@ -18,17 +18,16 @@ import { evaluate, unaffordable } from "../src/rules.js";
 
 export const FUND_MULTIPLES = [10, 25, 50, 100];
 
-/** 40 rule profiles: for each of 8 share limits, two plain and one with the new-recipient rule, one with no share limit
- * (new-recipient only for the strictest three); plus 8 "watch only" profiles that never exit. */
+/** 30 distinct rule profiles: 14 limits on the share of the fund one spend may take, each with and
+ * without the new-recipient rule, plus one new-recipient-only profile and one that never exits. */
 export function profiles() {
   const out = [];
-  for (const bps of [500, 1000, 1500, 2000, 2500, 3000, 4000, 5000]) {
+  for (const bps of [300, 500, 750, 1000, 1250, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 6000, 7500]) {
     out.push({ max_spend_share_bps: bps, new_recipient: false, blocked_recipients: [] });
     out.push({ max_spend_share_bps: bps, new_recipient: true, blocked_recipients: [] });
-    out.push({ max_spend_share_bps: bps, new_recipient: false, blocked_recipients: [] });
-    out.push({ max_spend_share_bps: null, new_recipient: bps <= 1500, blocked_recipients: [] });
   }
-  for (let i = 0; i < 8; i++) out.push({ max_spend_share_bps: null, new_recipient: false, blocked_recipients: [] });
+  out.push({ max_spend_share_bps: null, new_recipient: true, blocked_recipients: [] });
+  out.push({ max_spend_share_bps: null, new_recipient: false, blocked_recipients: [] });
   return out;
 }
 
@@ -45,7 +44,8 @@ export function simulate(spend, F, pool) {
   const absent = Array.from({ length: spend.absent_now_council ?? 0 }, (_, i) => `absent-${i}@${spend.dao}`);
   const members = [...new Set([...spend.approvers, ...objectors, ...absent])];
   const n = BigInt(members.length || 1);
-  let fund = BigInt(spend.median_earlier_amount) * BigInt(F);
+  const start = BigInt(spend.median_earlier_amount) * BigInt(F);
+  let fund = start;
   const amount = BigInt(spend.amount);
   // A spend larger than the modelled fund could not have been paid at all; keep it, but note it.
   const s = { id: spend.id, recipient: spend.receiver, token: "Usdc", amount: String(amount) };
@@ -54,7 +54,7 @@ export function simulate(spend, F, pool) {
     const rules = profileFor(m, pool);
     const r = evaluate(s, rules, { balances: { near: "0", usdc: String(fund) }, recipientPaidBefore: spend.receiver_paid_before });
     if (r.decision === "exit") {
-      const share = fund / n; // equal shares of the fund as it stood when the spend was queued
+      const share = start / n; // equal shares: each leaver takes 1/n of the fund as it stood at queue time
       exits.push({ member: m, broken: r.checks.filter((c) => c.broken).map((c) => c.rule) });
       fund -= share;
     }
@@ -88,7 +88,7 @@ export function run(replay, pool = profiles()) {
     }
     results.push(row);
   }
-  return { total: spends.length, agents_in_population: pool.length, results };
+  return { total: spends.length, rule_profiles: pool.length, results };
 }
 
 function pct(a, b) {
@@ -105,7 +105,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (process.argv.includes("--json")) {
     console.log(JSON.stringify(out, null, 2));
   } else {
-    console.log(`${out.total} real contested Sputnik transfers, ${out.agents_in_population} agent rule profiles.`);
+    console.log(`${out.total} real contested Sputnik transfers, ${out.rule_profiles} distinct agent rule profiles.`);
     console.log(`Fund size is modelled as F x the DAO's median earlier transfer in that token.\n`);
     console.log("F    | group    | judged | >=1 agent left | spend killed");
     for (const r of out.results) {

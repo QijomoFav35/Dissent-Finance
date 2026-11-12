@@ -231,15 +231,15 @@ async fn agent_key_can_only_exit_or_cancel() -> R<()> {
 
     // Another contract: refused by the runtime.
     let r = with_agent(&w.usdc, "ft_transfer", json!({ "receiver_id": id(&w, "ben"), "amount": "1" }), 1).send_to(&w.net).await;
-    assert!(r.is_err(), "the key moved tokens on another contract");
+    assert_key_refused(r, "a call to another contract");
     // Another method on the vault: refused.
     let r = with_agent(&w.vault, "set_rules", json!({ "rules": { "max_spend_share_bps": null, "new_recipient": false, "blocked_recipients": [] } }), 0)
         .send_to(&w.net)
         .await;
-    assert!(r.is_err(), "the key called a method outside its list");
+    assert_key_refused(r, "a method outside its list");
     // An allowed method with a deposit attached: refused.
     let r = with_agent(&w.vault, "exit", json!({}), 1).send_to(&w.net).await;
-    assert!(r.is_err(), "the key attached a deposit");
+    assert_key_refused(r, "an attached deposit");
     assert_eq!(w.usdc_of(&alice).await?, 0, "nothing moved yet");
 
     // The one thing it is for: exit, paying only Alice.
@@ -248,4 +248,17 @@ async fn agent_key_can_only_exit_or_cancel() -> R<()> {
     let shares: near_sdk::json_types::U128 = w.view(&w.vault, "get_shares", json!({ "account_id": alice })).await?;
     assert_eq!(shares.0, 0);
     Ok(())
+}
+
+/// The runtime must refuse the transaction because of the key's limits, not for some other reason
+/// such as a network error.
+fn assert_key_refused<T: std::fmt::Debug, E: std::fmt::Debug>(r: Result<T, E>, what: &str) {
+    let err = format!("{:?}", r.expect_err(&format!("the agent key was allowed {what}")));
+    println!("refused {what}: {}", &err[..err.len().min(200)]);
+    // The sandbox reports these as InvalidTransaction with no detail; a network or RPC failure is a
+    // different error, so this still tells a refusal by the key's limits apart from a broken connection.
+    assert!(
+        ["InvalidTransaction", "AccessKey", "Mismatch", "Deposit"].iter().any(|k| err.contains(k)),
+        "refused {what}, but not by the key's limits: {err}"
+    );
 }

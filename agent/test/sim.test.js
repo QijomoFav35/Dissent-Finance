@@ -9,8 +9,9 @@ const spend = (over) => ({
   receiver_paid_before: true, receiver_voted_approve: false, median_earlier_amount: "100", ...over,
 });
 
-test("40 profiles, and the same account always gets the same rules", () => {
-  assert.equal(pool.length, 40);
+test("30 distinct profiles, and the same account always gets the same rules", () => {
+  assert.equal(pool.length, 30);
+  assert.equal(new Set(pool.map((p) => JSON.stringify(p))).size, 30, "no duplicates");
   assert.deepEqual(profileFor("b.near", pool), profileFor("b.near", pool));
 });
 

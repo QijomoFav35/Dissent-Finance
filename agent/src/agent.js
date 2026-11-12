@@ -4,7 +4,9 @@
 import { evaluate, unaffordable } from "./rules.js";
 import { hashNote, makeNote } from "./note.js";
 
-export const MAX_ATTEMPTS = 3;
+// An exit that fails is retried on every pass until the spend's window closes: giving up early
+// would hand the spend to the approvers. The note is written once and its hash reused, so the
+// published note always matches whatever exit lands.
 // Contract answers to cancel_spend that mean another member's agent already settled the spend.
 const SETTLED = /ERR_ALREADY_EXECUTED|ERR_SPEND_AFFORDABLE/;
 
@@ -18,6 +20,7 @@ export class ExitAgent {
    *   store: { has(key: string): boolean, get(key: string): any, put(key: string, value: any): void },
    *   publish?: (note: any, hash: string) => Promise<void> | void,
    *   now?: () => string,
+   *   nowNs?: () => bigint,
    *   log?: (line: string) => void,
    * }} deps
    */
@@ -28,6 +31,7 @@ export class ExitAgent {
     this.store = deps.store;
     this.publish = deps.publish ?? (() => {});
     this.now = deps.now ?? (() => new Date().toISOString());
+    this.nowNs = deps.nowNs ?? (() => BigInt(Date.now()) * 1_000_000n);
     this.log = deps.log ?? (() => {});
   }
 
@@ -83,7 +87,17 @@ export class ExitAgent {
   async decide(spend, member, done) {
     const key = `decision:${spend.id}:${member.accountId}`;
     const prior = this.store.get(key);
-    if (prior && (prior.final || prior.attempts >= MAX_ATTEMPTS)) return;
+    if (prior?.final) return;
+
+    if (prior?.decision === "exit") {
+      // Already decided and published: retry the same exit with the same hash until the window closes.
+      if (this.nowNs() >= BigInt(spend.window_ends)) {
+        this.store.put(key, { ...prior, final: true, gave_up: "window closed" });
+        this.log(`${member.accountId}: window for spend ${spend.id} closed before an exit landed`);
+        return;
+      }
+      return this.tryExit(spend, member, key, prior, done);
+    }
 
     const shares = await this.reader.shares(member.accountId);
     if (shares === 0n) {
@@ -103,23 +117,28 @@ export class ExitAgent {
 
     const note = makeNote({ vault: this.vaultId, member: member.accountId, spend, balances, rules, result, approved, at: this.now() });
     const hash = hashNote(note);
+    // Saved before publishing or exiting, so a crash or a retry can never produce a second, different note.
+    const decision = { final: result.decision === "stay", decision: result.decision, hash, note, attempts: 0 };
+    this.store.put(key, decision);
     await this.publish(note, hash);
     done.decided.push({ spend: spend.id, member: member.accountId, decision: result.decision, hash });
+    if (result.decision === "stay") return;
+    return this.tryExit(spend, member, key, decision, done);
+  }
 
-    if (result.decision === "stay") {
-      this.store.put(key, { final: true, decision: "stay", hash });
-      return;
-    }
-
-    const attempts = (prior?.attempts ?? 0) + 1;
+  async tryExit(spend, member, key, decision, done) {
+    const attempts = (decision.attempts ?? 0) + 1;
     try {
-      const r = await member.caller.exit(hash);
+      const r = await member.caller.exit(decision.hash);
       if (r?.ok === false) throw new Error(`exit failed: ${JSON.stringify(r.failure)}`);
-      this.store.put(key, { final: true, decision: "exit", hash, tx: r?.hash ?? null });
-      done.exited.push({ spend: spend.id, member: member.accountId, hash, tx: r?.hash ?? null });
-      this.log(`${member.accountId} exited over spend ${spend.id} (${hash.slice(0, 12)})`);
+      this.store.put(key, { ...decision, final: true, attempts, tx: r?.hash ?? null });
+      done.exited.push({ spend: spend.id, member: member.accountId, hash: decision.hash, tx: r?.hash ?? null });
+      this.log(`${member.accountId} exited over spend ${spend.id} (${decision.hash.slice(0, 12)})`);
     } catch (e) {
-      this.store.put(key, { final: false, decision: "exit", hash, attempts, error: String(e?.message ?? e) });
+      const error = String(e?.message ?? e);
+      // No shares left: an earlier attempt already landed, or the member left by hand. Nothing to retry.
+      const final = /ERR_NO_SHARES/.test(error);
+      this.store.put(key, { ...decision, final, attempts, error });
       throw e;
     }
   }

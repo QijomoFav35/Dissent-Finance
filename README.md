@@ -6,6 +6,8 @@ A vault for a group's money that sits next to an unchanged Sputnik DAO on NEAR. 
 
 If enough members leave that the vault can no longer pay the spend, anyone can cancel it.
 
+The exit itself is an old idea: Moloch DAO's "ragequit" (2019) lets members who did not vote for a proposal leave with their share during a grace period before it runs. Sputnik DAO, the DAO contract deployed by the `sputnik-dao.near` factory, has nothing like it, and moving a group's treasury to a new DAO is a big ask. Dissent Finance adds ragequit next to an unchanged Sputnik DAO: the DAO keeps its members, roles and votes, and only the money moves into the vault. The other new part is that members don't have to be watching: each one's agent applies their rules and leaves for them within seconds, on a key that can do nothing else.
+
 ## The story the tests check
 
 Five friends put 10 NEAR and 100 USDC each into a vault. At 3am Ben and Cara, two of the five, approve 300 of the 500 USDC to Ben. Alice's rule says leave if one spend takes more than 20% of the fund. Dan's says leave if the receiver has never been paid before. Emma has blocked Ben as a receiver.
@@ -23,17 +25,22 @@ While the window is open:
 - members who did not approve can `exit` and receive their exact pro-rata share of NEAR and USDC (rounded down in the vault's favour)
 - members who approved can't exit until the spend is settled, so they can't approve a payment and then leave before it lands
 - nobody can join, so a late deposit can't dilute anyone's share
-- a spend approved by an account that holds no shares is refused at queue time
+- approvals count only from accounts that hold shares, so a council member who has left the vault can't push a spend through or block one; a spend no holder approved is refused
+- at most 8 spends can be open at once, and memos are capped at 256 bytes, so agents can always read every open spend and an exit always fits its gas
 
-After the window, `execute_spend` pays the receiver plus a 0.1% fee, if the vault can still afford it. If it can't, `cancel_spend` marks it cancelled.
+After the window, `execute_spend` pays the receiver plus a 0.1% fee, if the vault can still afford it. If it can't, `cancel_spend` marks it cancelled. The fee goes to the fee account set when the vault was created (for the mainnet vault, `dissentfinance.near`) and can't be changed afterwards.
 
-The agent (`agent/`) reads only public views. It checks each open spend against its owner's rules, which are three numbers and lists stored in the vault: the largest share of the fund one spend may take, whether the receiver must have been paid before, and blocked receivers. It never reads the proposal's description, so the text of a proposal can't talk it out of leaving. Before exiting it writes a note with every check it ran and sends the note's SHA-256 hash on chain with the `exit` call, so anyone can match the note to the exit later.
+The vault pays for its own storage from the same NEAR balance that holds members' money, so it refuses any call that would make its storage eat into what it owes members, joiners or claimants, and it keeps a reserve so exits, cancels and claims always have room. USDC deposits toward a join must be at least 0.1 USDC, and deposits, refused joins and rule changes are written only to the transaction log, so outsiders can't grow the stored record.
 
-The agent signs with a NEAR function-call key that the member adds to their own account, limited to the vault and to `exit` and `cancel_spend`, with no deposit allowed. The NEAR runtime refuses anything else signed with it. The worst a stolen key can do is make its owner leave with their own money.
+The agent (`agent/`) reads only public views. It checks each open spend against its owner's rules, which are three numbers and lists stored in the vault: the largest share of the fund one spend may take, whether the receiver must have been paid before, and blocked receivers. It never reads the proposal's description, so the text of a proposal can't talk it out of leaving. Before exiting it writes a note with every check it ran and sends the note's SHA-256 hash on chain with the `exit` call, so anyone can match the note to the exit later. The note is written once; if the exit fails (a busy RPC endpoint, say) the agent retries with the same hash on every pass until the spend's window closes.
+
+The agent signs with a NEAR function-call key that the member adds to their own account, limited to the vault and to `exit` and `cancel_spend`, with no deposit allowed. The NEAR runtime refuses anything else signed with it. A stolen key can make its owner leave with their own money, attach a misleading note hash to that exit, and spend up to its 0.25 NEAR gas allowance. It can't send anyone's funds anywhere else.
+
+The rules are deterministic on purpose: the same spend, rules and fund always give the same decision, and anyone can replay it from the note. There is no model in the exit path.
 
 ## Run it yourself
 
-You need Rust 1.95 with the `wasm32-unknown-unknown` target, `cargo-near` 0.23.0 and Node 24. The sandbox tests download the NEAR sandbox binary on their first run.
+You need Rust 1.95 (pinned in `rust-toolchain.toml`) with the `wasm32-unknown-unknown` target, `cargo-near` 0.23 and Node 24. The mainnet contract was built reproducibly in the `sourcescan/cargo-near:0.22.0-rust-1.99.1` image named in `Cargo.toml`. The sandbox tests download the NEAR sandbox binary on their first run.
 
 1. Get the DAO code that mainnet uses today.
 
@@ -49,7 +56,7 @@ You need Rust 1.95 with the `wasm32-unknown-unknown` target, `cargo-near` 0.23.0
    cd agent && npm install && npm test
    ```
 
-   You should see 29 pass, 0 fail. They include the story above, retries, a prompt injection in the spend's memo, five separate agents each with only its own key, and the simulation below.
+   You should see 29 pass, 0 fail. They include the story above, retries that reuse the same note until the window closes, a prompt injection in the spend's memo, five separate agents each with only its own key, and the simulation below.
 
 3. Contract unit and property tests.
 
@@ -57,7 +64,7 @@ You need Rust 1.95 with the `wasm32-unknown-unknown` target, `cargo-near` 0.23.0
    cd contracts/vault && cargo test --lib
    ```
 
-   You should see 50 passed. The two property tests run random sequences of joins, spends, votes, exits and claims and check after every step that shares add up, the books balance per token, exits pay the exact pro-rata amount and nothing executes early or twice. They take several minutes at 256 cases. `PROPTEST_CASES=32 cargo test --lib` runs a shorter pass.
+   You should see 59 passed. The two property tests run random sequences of joins, spends, votes, exits and claims and check after every step that shares add up, the books balance per token, exits pay the exact pro-rata amount and nothing executes early or twice. They take several minutes at 256 cases. `PROPTEST_CASES=32 cargo test --lib` runs a shorter pass.
 
 4. End to end against the real Sputnik code.
 
@@ -75,7 +82,7 @@ You need Rust 1.95 with the `wasm32-unknown-unknown` target, `cargo-near` 0.23.0
 
    You should see `spend 0 settled as Cancelled after` about one second, then `exited:` with two or three of Alice, Dan and Emma, and `1 passed`. The test checks each leaver got exactly 100 USDC, Ben got nothing, both approvers' notes say stay, and every exit on chain carries the hash of the note its agent wrote. The agent logs and notes are kept in the folder it prints.
 
-6. The swarm replay on real DAO history.
+6. The simulation on real DAO history.
 
    ```
    node agent/sim/swarm.js replay3.json
@@ -83,22 +90,22 @@ You need Rust 1.95 with the `wasm32-unknown-unknown` target, `cargo-near` 0.23.0
 
    You should see the table in the next section.
 
-## What 40 agents would have done to real contested spends
+## What agents with varied rules would have done to real contested spends
 
-`scripts/replay3.mjs` reads public mainnet data from the 16 Sputnik DAOs where an earlier scan of the 49 largest DAOs found approved transfers with Reject votes. It found 473 such transfers. For each one it records the amount, who voted which way, whether the DAO had paid that receiver before and the DAO's median earlier transfer in the same token. The output is committed as `replay3.json`.
+`scripts/replay3.mjs` reads public mainnet data from 16 Sputnik DAOs and finds every approved transfer that had at least one Reject vote: 473 of them. The list of 16 DAOs is written into the script; it came from an earlier scan of the 49 Sputnik DAOs with the most proposals, which is not in this repo. For each transfer it records the amount, who voted which way, whether the DAO had paid that receiver before and the DAO's median earlier transfer in the same token. The output is committed as `replay3.json`.
 
-`agent/sim/swarm.js` gives every member who did not approve an agent, with rules drawn from 40 profiles and fixed per account, and runs the same `evaluate()` the live agent uses. Past treasury balances can't be read from a view call, so the fund is modelled as F times the DAO's median earlier transfer.
+`agent/sim/swarm.js` gives every member who did not approve, and every council member who did not vote, an agent. Each account gets one of 30 distinct rule profiles, fixed per account, and the simulation runs the same `evaluate()` the live agent uses. Past treasury balances can't be read from a view call, so the fund is modelled as F times the DAO's median earlier transfer, and shares are equal.
 
-| F | Routine nearweek payouts killed (of 427) | Other spends where at least one agent left (of 45) | Other spends killed (of 45) |
-|---|---|---|---|
-| 10 | 0 | 82% | 4 |
-| 25 | 0 | 51% | 2 |
-| 50 | 0 | 47% | 1 |
-| 100 | 0 | 38% | 1 |
+| F | Routine nearweek payouts where at least one agent left (of 427) | Routine payouts killed | Other spends where at least one agent left (of 45) | Other spends killed (of 45) |
+|---|---|---|---|---|
+| 10 | 98.1% | 0 | 84.4% | 5 |
+| 25 | 0.2% | 0 | 66.7% | 3 |
+| 50 | 0.2% | 0 | 53.3% | 2 |
+| 100 | 0.2% | 0 | 42.2% | 1 |
 
-427 of the 473 come from one DAO, nearweek-news-contribution, and all of them are the same 0.5 NEAR payment to one of 10 regular contributors. At F of 25 and above, only one of those 427 made any agent leave. The two spends killed at F of 25 were a payment 100 times that DAO's usual size and one 20 times the usual size where the receiver had voted for their own payment.
+427 of the 473 come from one DAO, nearweek-news-contribution, and all of them are the same 0.5 NEAR payment to one of 10 regular contributors. In a small fund (F of 10) each of those payouts is 10% of the fund, and almost every one makes some member's agent leave: strict rules in a small fund produce a lot of exits. None of those payouts is ever killed, because one or two members leaving doesn't make a 10% payment unaffordable. At F of 25, the three spends killed were a payment 100 times that DAO's usual size (in `testing-astradao`, which looks like a test DAO), one 20 times the usual size where the receiver voted for their own payment, and one 6.7 times the usual size.
 
-Limits of this replay: the fund size is assumed, shares are assumed equal, one DAO dominates the data, and one transfer with no earlier history in its token is skipped. It shows how the rules behave on the sizes and voting patterns of real spends.
+Limits of this replay: the fund size is assumed, shares are assumed equal, one DAO dominates the data, and one transfer with no earlier history in its token is skipped. It shows how the rules behave on the sizes and voting patterns of real spends, and nothing about what those DAOs' members would have chosen.
 
 ## On mainnet
 

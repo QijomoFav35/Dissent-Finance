@@ -204,7 +204,14 @@ impl Harness {
                     "votes": votes
                 });
                 self.at(&acc("vault.near"), 0);
+                let full = self.v.get_open_spends().len() >= MAX_OPEN_SPENDS;
                 let id = self.v.record_spend(&args, &proposal, pid, recipient, token, U128(amount), "p".into());
+                if full {
+                    // The cap on open spends holds: the proposal is refused and nothing is queued.
+                    prop_assert_eq!(id, Err(ERR_TOO_MANY_OPEN));
+                    prop_assert_eq!(self.v.get_open_spends().len(), MAX_OPEN_SPENDS);
+                    return Ok(());
+                }
                 prop_assert!(id.is_ok(), "a matching approved proposal was refused: {id:?}");
                 let s = self.v.get_spend(id.unwrap()).unwrap();
                 prop_assert_eq!(s.window_ends.0, self.now + WINDOW);

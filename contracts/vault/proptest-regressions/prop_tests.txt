@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 2b606b0f9e0373ef6dbe9d55f818d0f4340a7480462943a3f6762bc719b7cde3 # shrinks to ops = [Join { who: 0, near: 2, usdc: 100000 }, Join { who: 1, near: 1, usdc: 100000 }, Deposit { who: 0, usdc: 1 }, Deposit { who: 0, usdc: 1 }, Join { who: 2, near: 1, usdc: 100000 }, Queue { usdc: false, share_bps: 1, approve: 25, reject: 0, to_shop: false }, Queue { usdc: false, share_bps: 1, approve: 1, reject: 0, to_shop: false }, Queue { usdc: false, share_bps: 1, approve: 1, reject: 0, to_shop: false }, Queue { usdc: false, share_bps: 1, approve: 9, reject: 0, to_shop: false }, Queue { usdc: false, share_bps: 1, approve: 1, reject: 0, to_shop: false }, Queue { usdc: false, share_bps: 1, approve: 1, reject: 0, to_shop: false }, Queue { usdc: false, share_bps: 1, approve: 1, reject: 6, to_shop: true }, Queue { usdc: true, share_bps: 14944, approve: 166, reject: 123, to_shop: false }, Queue { usdc: true, share_bps: 3247, approve: 47, reject: 242, to_shop: false }]

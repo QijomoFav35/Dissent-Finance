@@ -12,7 +12,7 @@ import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { actions, KeyPair, teraToGas } from "near-api-js";
 import {
-  ROOT, USDC, FACTORY, DAO_NAME, DAO, VAULT, MEMBERS, member, NEAR, milli, USDC_STORAGE, AGENT_KEYS,
+  ROOT, USDC, FACTORY, DAO_NAME, DAO, VAULT, VAULT_NAME, MEMBERS, member, NEAR, milli, USDC_STORAGE, AGENT_KEYS,
   log, near, usdc, signerFor, newKeyFile, exists, balance, view, call, record, explorer, policy, rulesFor,
 } from "./lib.mjs";
 
@@ -24,14 +24,14 @@ const FUND_MEMBER = milli(180); // join deposit 0.1, gas, the proposal bond
 const JOIN_NEAR = milli(100);
 const MEMBER_FREE_BEFORE_JOIN = milli(250); // 0.1 join deposit + 0.1 held for its gas; after it, 0.14 left for a vote (0.12 held) or an exit (0.08 held)
 const DAO_DEPOSIT = milli(100);
-const PER_MEMBER_USDC_MAX = 200_000n; // 0.2 USDC
+const PER_MEMBER_USDC = 200_000n; // 0.2 USDC each; members who already hold it use their own
 const STORAGE_PER_BYTE = 10n ** 19n;
 
 async function main() {
   // ---------- preflight ----------
   if (!fs.existsSync(WASM)) throw new Error(`build the vault first: missing ${WASM}`);
   const code = fs.readFileSync(WASM);
-  const vaultFund = BigInt(code.length) * STORAGE_PER_BYTE + milli(150); // code storage plus room for its state
+  const vaultFund = BigInt(code.length) * STORAGE_PER_BYTE + milli(250); // code storage, the reserve for exits, and room for its state
   const root = signerFor(ROOT);
   const rootBal = await balance(ROOT);
   const rootUsdc = BigInt(await view(USDC, "ft_balance_of", { account_id: ROOT }));
@@ -53,27 +53,36 @@ async function main() {
   // The DAO call also holds back 0.2 NEAR of gas until it finishes, so that much must be free at that moment.
   const peak = (await exists(DAO)) ? 0n : DAO_DEPOSIT + milli(210);
   const alreadyIn = await alreadyJoined();
-  const perMember = alreadyIn ? null : minBig(PER_MEMBER_USDC_MAX, rootUsdc / 5n);
+  const perMember = PER_MEMBER_USDC;
+  let usdcShortfall = 0n;
+  if (!alreadyIn) {
+    for (const m of MEMBERS) {
+      const id = member(m);
+      const have = (await exists(id)) ? BigInt(await view(USDC, "ft_balance_of", { account_id: id })) : 0n;
+      const joined = (await exists(VAULT)) && !/^1{32}$/.test((await balance(VAULT)).code) && BigInt(await view(VAULT, "get_shares", { account_id: id })) > 0n;
+      if (!joined && have < perMember) usdcShortfall += perMember - have;
+    }
+  }
 
   log(`${ROOT}: ${near(rootBal.amount)} NEAR, ${usdc(rootUsdc)} USDC`);
   for (const [what, amount] of plan) log(`  will ${what}: ${near(amount)} NEAR`);
   log(`  needs about ${near(needNear)} NEAR in total, plus gas`);
-  if (!alreadyIn) log(`  each member gets ${usdc(perMember)} USDC and joins with it and ${near(JOIN_NEAR)} NEAR`);
+  if (!alreadyIn) log(`  each member joins with ${usdc(perMember)} USDC and ${near(JOIN_NEAR)} NEAR; ${ROOT} covers ${usdc(usdcShortfall)} USDC they are missing`);
   log(`  spend window: ${WINDOW_SEC} seconds`);
   if (rootBal.amount < peak) throw new Error(`not enough NEAR on ${ROOT} for the DAO call: has ${near(rootBal.amount)}, needs ${near(peak)} free while it runs`);
   if (rootBal.amount < needNear) throw new Error(`not enough NEAR on ${ROOT}: has ${near(rootBal.amount)}, needs about ${near(needNear)}`);
-  if (!alreadyIn && perMember < 10_000n) throw new Error(`not enough USDC on ${ROOT}: has ${usdc(rootUsdc)}, needs at least 0.05`);
+  if (!alreadyIn && rootUsdc < usdcShortfall) throw new Error(`not enough USDC on ${ROOT}: has ${usdc(rootUsdc)}, members are short ${usdc(usdcShortfall)}`);
   if (!GO) {
     log("dry run: nothing sent. Run again with --go to do it.");
     return;
   }
 
   // ---------- accounts ----------
-  for (const name of [...MEMBERS, "vault"]) {
-    const id = name === "vault" ? VAULT : member(name);
+  for (const name of [...MEMBERS, VAULT_NAME]) {
+    const id = name === VAULT_NAME ? VAULT : member(name);
     if (await exists(id)) continue;
     const publicKey = newKeyFile(id);
-    const out = await root.createSubAccount({ accountOrPrefix: name, publicKey, nearToTransfer: name === "vault" ? vaultFund : FUND_MEMBER });
+    const out = await root.createSubAccount({ accountOrPrefix: name, publicKey, nearToTransfer: name === VAULT_NAME ? vaultFund : FUND_MEMBER });
     const hash = out?.transaction?.hash;
     log(`created ${id} ${explorer(hash)}`);
     record("create_account", { account: id, tx: hash });
@@ -179,7 +188,6 @@ async function alreadyJoined() {
   return b.members === MEMBERS.length;
 }
 
-const minBig = (a, b) => (a < b ? a : b);
 
 main().catch((e) => {
   console.error(`stopped: ${e?.message ?? e}${e?.cause ? ` (${e.cause.code ?? ""} ${e.cause.message ?? ""})` : ""}`);

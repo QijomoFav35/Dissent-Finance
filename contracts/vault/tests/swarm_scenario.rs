@@ -157,6 +157,18 @@ async fn five_agents_leave_and_kill_the_spend_on_their_own() -> R<()> {
         let published: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
         assert_eq!(published["note"]["decision"], "exit", "{m}'s note");
         let hash = published["hash"].as_str().unwrap();
+        // Recompute the hash from the note itself with the agent's own code, so the stored hash is not trusted.
+        let out = Command::new("node")
+            .current_dir(agent_dir())
+            .args([
+                "--input-type=module",
+                "-e",
+                "import { hashNote } from './src/note.js'; import fs from 'node:fs'; console.log(hashNote(JSON.parse(fs.readFileSync(process.argv.at(-1), 'utf8')).note));",
+            ])
+            .arg(&path)
+            .output()?;
+        let recomputed = String::from_utf8(out.stdout)?.trim().to_string();
+        assert_eq!(recomputed, hash, "{m}'s published note does not hash to the hash stored with it");
         assert!(record.contains(hash), "{m}'s exit on chain does not carry the published note hash {hash}");
     }
     for m in ["ben", "cara"] {

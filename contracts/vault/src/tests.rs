@@ -415,14 +415,128 @@ fn the_same_proposal_cannot_be_queued_twice() {
 }
 
 #[test]
-fn a_spend_approved_by_someone_with_no_shares_is_refused() {
-    let (mut v, _env) = five_members();
+fn approvals_from_accounts_with_no_shares_are_ignored() {
+    let (mut v, env) = five_members();
+    // A council member who already left votes alongside a holder: the spend still queues,
+    // and only the holder counts as an approver.
     let approvals = json!({ "ben.near": "Approve", "ghost.near": "Approve" });
     let args = spend_args(9, "ben.near", "usdc.near", 10 * USDC);
     let p = proposal("Approved", "vault.near", "queue_spend", &args, approvals);
+    env.call(&vault_id(), 0);
+    let id = v.record_spend(&args, &p, 9, acc("ben.near"), Token::Usdc, U128(10 * USDC), "spend".into()).unwrap();
+    assert_eq!(v.get_spend(id).unwrap().approvers, vec![acc("ben.near")]);
+}
+
+#[test]
+fn a_spend_no_holder_approved_is_refused() {
+    let (mut v, env) = five_members();
+    let approvals = json!({ "ghost.near": "Approve", "frank.near": "Approve" });
+    let args = spend_args(9, "ben.near", "usdc.near", 10 * USDC);
+    let p = proposal("Approved", "vault.near", "queue_spend", &args, approvals);
+    env.call(&vault_id(), 0);
     let r = v.record_spend(&args, &p, 9, acc("ben.near"), Token::Usdc, U128(10 * USDC), "spend".into());
-    assert_eq!(r, Err(ERR_APPROVER_NOT_HOLDER));
+    assert_eq!(r, Err(ERR_NO_HOLDER_APPROVED));
     assert!(v.get_open_spends().is_empty());
+}
+
+#[test]
+fn deposits_below_the_minimum_are_returned() {
+    let (mut v, env) = setup();
+    env.call(&usdc(), 0);
+    match v.ft_on_transfer(acc("mallory.near"), U128(MIN_JOIN_USDC - 1), "join".into()) {
+        PromiseOrValue::Value(r) => assert_eq!(r.0, MIN_JOIN_USDC - 1, "all of it goes back"),
+        _ => panic!("expected value"),
+    }
+    assert_eq!(v.get_pending(acc("mallory.near")).0, 0);
+}
+
+#[test]
+fn deposits_from_outsiders_do_not_grow_the_stored_record() {
+    let (mut v, env) = five_members();
+    let before = v.get_record_len();
+    for i in 0..20 {
+        env.call(&usdc(), 0);
+        let _ = v.ft_on_transfer(acc(&format!("spam{i}.near")), U128(MIN_JOIN_USDC), "join".into());
+    }
+    assert_eq!(v.get_record_len(), before);
+}
+
+#[test]
+#[should_panic(expected = "ERR_STORAGE")]
+fn a_deposit_that_would_eat_into_members_near_is_refused() {
+    let (mut v, _env) = five_members();
+    // The account holds exactly what it owes members and nothing for storage.
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(vault_id())
+        .predecessor_account_id(usdc())
+        .account_balance(NearToken::from_yoctonear(v.get_balances().near.0));
+    testing_env!(b.build());
+    let _ = v.ft_on_transfer(acc("mallory.near"), U128(MIN_JOIN_USDC), "join".into());
+}
+
+#[test]
+fn a_spend_that_would_eat_into_members_near_is_refused() {
+    let (mut v, env) = five_members();
+    let args = spend_args(9, "ben.near", "usdc.near", 10 * USDC);
+    let p = proposal("Approved", "vault.near", "queue_spend", &args, two_approvals());
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(vault_id())
+        .predecessor_account_id(vault_id())
+        .block_timestamp(env.now)
+        .account_balance(NearToken::from_yoctonear(v.get_balances().near.0));
+    testing_env!(b.build());
+    let r = v.record_spend(&args, &p, 9, acc("ben.near"), Token::Usdc, U128(10 * USDC), "spend".into());
+    assert_eq!(r, Err(ERR_STORAGE));
+}
+
+#[test]
+#[should_panic(expected = "ERR_MEMO_TOO_LONG")]
+fn memos_are_capped() {
+    let (mut v, _env) = five_members();
+    let env = Env { now: 1_000 };
+    env.call(&dao(), 0);
+    let _ = v.queue_spend(1, acc("ben.near"), "usdc.near".into(), U128(USDC), Some("x".repeat(MAX_MEMO + 1)));
+}
+
+#[test]
+fn open_spends_are_capped() {
+    let (mut v, env) = five_members();
+    for i in 0..MAX_OPEN_SPENDS as u64 {
+        queue(&mut v, &env, i, "ben.near", Token::Usdc, USDC, two_approvals());
+    }
+    let n = MAX_OPEN_SPENDS as u64;
+    let args = spend_args(n, "ben.near", "usdc.near", USDC);
+    let p = proposal("Approved", "vault.near", "queue_spend", &args, two_approvals());
+    env.call(&vault_id(), 0);
+    let r = v.record_spend(&args, &p, n, acc("ben.near"), Token::Usdc, U128(USDC), "spend".into());
+    assert_eq!(r, Err(ERR_TOO_MANY_OPEN));
+}
+
+#[test]
+fn a_receiver_counts_as_paid_only_once_the_payment_lands() {
+    let (mut v, mut env) = five_members();
+    let id = queue(&mut v, &env, 1, "shop.near", Token::Usdc, 10 * USDC, two_approvals());
+    env.now += WINDOW;
+    env.call(&acc("anyone.near"), 0);
+    v.execute_spend(id);
+    assert!(!v.was_paid(acc("shop.near")), "not until the transfer settles");
+    // The payment bounces: the shop is still a new receiver.
+    v.settle_payment(acc("shop.near"), Token::Usdc, 10 * USDC, false, true);
+    assert!(!v.was_paid(acc("shop.near")));
+}
+
+#[test]
+#[should_panic(expected = "ERR_SPEND_CANCELLED")]
+fn cancelling_a_cancelled_spend_says_so() {
+    let (mut v, env) = five_members();
+    let id = queue(&mut v, &env, 1, "ben.near", Token::Usdc, 300 * USDC, two_approvals());
+    for m in ["alice.near", "dan.near", "emma.near"] {
+        env.call(&acc(m), 0);
+        v.exit(None);
+    }
+    env.call(&acc("anyone.near"), 0);
+    v.cancel_spend(id);
+    v.cancel_spend(id);
 }
 
 // ---------- exits ----------
@@ -488,14 +602,15 @@ fn approver_can_exit_once_the_spend_is_settled() {
 #[test]
 fn exit_rounds_down_in_the_vaults_favour() {
     let (mut v, env) = setup();
-    join(&mut v, &env, "alice.near", 3, 10);
-    join(&mut v, &env, "ben.near", 3, 10);
-    join(&mut v, &env, "cara.near", 3, 10);
+    // USDC deposits must meet the join minimum; NEAR stays tiny so the rounding shows.
+    join(&mut v, &env, "alice.near", 3, MIN_JOIN_USDC + 1);
+    join(&mut v, &env, "ben.near", 3, MIN_JOIN_USDC + 1);
+    join(&mut v, &env, "cara.near", 3, MIN_JOIN_USDC + 1);
     env.call(&acc("alice.near"), 0);
     v.exit(None);
     let b = v.get_balances();
     assert_eq!(b.near.0, 6);
-    assert_eq!(b.usdc.0, 20);
+    assert_eq!(b.usdc.0, 2 * (MIN_JOIN_USDC + 1));
     assert_books(&v, Token::Near);
     assert_books(&v, Token::Usdc);
 }
@@ -532,6 +647,9 @@ fn spend_executes_after_the_window_with_fee() {
     assert_eq!(b.usdc.0, 500 * USDC - 100 * USDC - 100_000);
     assert_eq!(b.open_spends, 0);
     assert_eq!(v.get_spend(id).unwrap().status, SpendStatus::Executed);
+    // The payment's callback reports it landed.
+    env.call(&vault_id(), 0);
+    v.settle_payment(acc("shop.near"), Token::Usdc, 100 * USDC, true, true);
     assert!(v.was_paid(acc("shop.near")));
     let l = v.get_ledger(Token::Usdc);
     assert_eq!(l.spent.0, 100 * USDC);

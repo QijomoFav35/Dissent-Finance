@@ -192,7 +192,9 @@ async function load() {
     const nKeys = keys.keys.length;
     $("keys").innerHTML = nKeys === 0 ? `<span class="ok">None.</span> Nobody can change the code or move funds outside its rules.` : `<span class="bad">${nKeys} key(s)</span>`;
     const codeOk = account.code_hash === VERIFIED_CODE;
-    $("code").innerHTML = `${codeOk ? '<span class="ok">Matches the verified build</span>' : '<span class="bad">Does not match the verified build</span>'}<div class="mono">${esc(account.code_hash)}</div><div style="font-size:.85rem"><a href="https://github.com/QijomoFav35/Dissent-Finance/tree/54ccf1b24c629e86ba1cb5d87b9ac80f3eb64f39/contracts/vault">source at commit 54ccf1b</a></div>`;
+    const meta = await view(VAULT, "contract_source_metadata").catch(() => null);
+    const link = meta?.link ? `<a href="${esc(meta.link)}">${esc(meta.link.split("/tree/")[1]?.slice(0, 7) ?? "source")}</a>` : "no source link";
+    $("code").innerHTML = `${codeOk ? '<span class="ok">Code hash is the one this page expects</span>' : '<span class="bad">Code hash is not the one this page expects</span>'}<div class="mono">${esc(account.code_hash)}</div><div style="font-size:.85rem">The contract names its source as commit ${link}. This page can't rebuild it; <code>near contract verify</code> below does.</div>`;
     $("holds").innerHTML = `${usdc(balances.usdc)} USDC and ${near(balances.near)} NEAR<div style="font-size:.85rem;color:var(--muted)">for ${balances.members} members, ${balances.open_spends} spend(s) open</div>`;
 
     // ---------- spend 0 and the DAO's own record of the vote ----------
