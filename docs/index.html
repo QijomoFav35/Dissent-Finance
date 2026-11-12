@@ -178,7 +178,7 @@ async function load() {
       view(VAULT, "get_record_len"),
       fetch(`${RAW}/evidence.jsonl`).then((r) => (r.ok ? r.text() : "")).catch(() => ""),
     ]);
-    const proposal = await view(DAO, "get_proposal", { id: spend.proposal_id });
+    const proposal = spend ? await view(DAO, "get_proposal", { id: spend.proposal_id }) : { votes: {}, status: "none" };
     const record = (await view(VAULT, "get_record", { from_index: 0, limit: Math.min(len, 100) })).map((s) => JSON.parse(s));
     // Lines written before v2 carry no vault field and all belong to v1.
     const evidence = evidenceText.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } })
@@ -214,10 +214,11 @@ async function load() {
       if (ev.event === "queue_spend" && ev.data?.[0]?.spend_id === 0) break;
       if (ev.event === "join") fundAtQueue += BigInt(ev.data[0].usdc);
     }
+    if (!spend) $("spend").innerHTML = `<p>No spend has been queued in this vault yet.</p>`;
     const votes = proposal.votes || {};
     const approvers = Object.keys(votes).filter((a) => votes[a] === "Approve");
     const silent = MEMBERS.filter((m) => !(m in votes));
-    $("spend").innerHTML = `
+    if (spend) $("spend").innerHTML = `
       <p><strong>${usdc(spend.amount)} USDC to ${short(spend.recipient)}</strong>, ${fundAtQueue ? `${Math.round(Number((BigInt(spend.amount) * 1000n) / fundAtQueue) / 10)}% of the ${usdc(fundAtQueue)} USDC the vault held when it was queued` : ""}.
       Status: <span class="pill ${spend.status === "Cancelled" ? "done" : "stay"}">${esc(spend.status)}</span></p>
       <p>Approved in the DAO by ${approvers.map(short).join(" and ")} (DAO proposal ${spend.proposal_id} is ${esc(proposal.status)}${txFor.propose ? `, filed in ${tx(txFor.propose)}` : ""}). ${silent.map(short).join(", ")} did not vote.</p>

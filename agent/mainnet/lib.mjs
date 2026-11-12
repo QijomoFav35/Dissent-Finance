@@ -26,7 +26,8 @@ export const PROPOSAL_BOND = milli(10); // 0.01 NEAR, returned when the proposal
 const CRED = path.join(os.homedir(), ".near-credentials");
 // Agent keys are bound to one vault, so each vault has its own folder (v1 kept the original path).
 export const AGENT_KEYS = VAULT_NAME === "vault" ? path.join(CRED, "dissent-agents") : path.join(CRED, "dissent-agents", VAULT_NAME);
-export const rpc = new Rpc(RPCS, { tries: 10, timeoutMs: 20_000 });
+// The setup and story scripts read back what they just wrote, so they read the latest blocks.
+export const rpc = new Rpc(RPCS, { tries: 10, timeoutMs: 20_000, finality: "optimistic" });
 // Transactions go through every endpoint in turn: if one fails or rate-limits, the same signed
 // transaction goes to the next, so a fallback can never pay twice.
 export const provider = new FailoverRpcProvider(RPCS.map((url) => new JsonRpcProvider({ url })));

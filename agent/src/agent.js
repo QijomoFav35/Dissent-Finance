@@ -9,8 +9,12 @@ import { hashNote, makeNote } from "./note.js";
 // Retries back off, so a stuck RPC can't burn the key's gas allowance. The note is written once and
 // its hash reused, so the published note always matches whatever exit lands.
 export const BACKOFF_MS = (attempt) => Math.min(60_000, 2_000 * 2 ** Math.max(0, attempt - 1));
+// Each attempt can use up to 80 Tgas of the key's 0.25 NEAR allowance, so cap them well below the
+// roughly 30 the allowance would cover. With the backoff above, 20 attempts span about 15 minutes.
+export const MAX_EXIT_ATTEMPTS = 20;
 // Contract answers to cancel_spend that mean another member's agent already settled the spend.
-const SETTLED = /ERR_ALREADY_EXECUTED|ERR_SPEND_CANCELLED|ERR_SPEND_AFFORDABLE/;
+// ERR_SPEND_AFFORDABLE is not here: it means the agent's read was stale, so it tries again next pass.
+const SETTLED = /ERR_ALREADY_EXECUTED|ERR_SPEND_CANCELLED/;
 
 export class ExitAgent {
   /**
@@ -135,7 +139,8 @@ export class ExitAgent {
     } catch (e) {
       const error = String(e?.message ?? e);
       // No shares left: an earlier attempt already landed, or the member left by hand. Nothing to retry.
-      const final = /ERR_NO_SHARES/.test(error);
+      const final = /ERR_NO_SHARES/.test(error) || attempts >= MAX_EXIT_ATTEMPTS;
+      if (attempts >= MAX_EXIT_ATTEMPTS) this.log(`${member.accountId}: giving up on spend ${spend.id} after ${attempts} attempts (${error})`);
       this.store.put(key, { ...decision, final, attempts, error, retry_at: this.nowMs() + BACKOFF_MS(attempts) });
       throw e;
     }

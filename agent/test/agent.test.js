@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ExitAgent, MemoryStore, BACKOFF_MS } from "../src/agent.js";
+import { ExitAgent, MemoryStore, BACKOFF_MS, MAX_EXIT_ATTEMPTS } from "../src/agent.js";
 import { hashNote } from "../src/note.js";
 import { FakeVault, USDC, NEAR } from "./fake-vault.js";
 
@@ -124,6 +124,18 @@ test("an exit that fails is retried with the same note, backing off, for as long
   await a2.tick();
   assert.equal(v2.calls.filter((c) => c.method === "exit").length, 1, "no attempts once the spend left the open list");
   assert.ok(id >= 0);
+
+  // An exit that never lands stops after MAX_EXIT_ATTEMPTS, protecting the key's gas allowance.
+  const v3 = new FakeVault({ near: 1n, usdc: 100n, members: [["alice.near", 1n], ["ben.near", 1n]] });
+  v3.rulesOf.set("alice.near", { max_spend_share_bps: 1 });
+  v3.queue({ recipient: "ben.near", token: "Usdc", amount: 10n, approvers: ["ben.near"] });
+  let t3 = 0;
+  const a3 = new ExitAgent({ vaultId: "v", reader: v3, members: [{ accountId: "alice.near", caller: v3.callerFor("alice.near", { failTimes: 999 }) }], store: new MemoryStore(), nowMs: () => t3 });
+  for (let i = 0; i < MAX_EXIT_ATTEMPTS + 10; i++) {
+    await a3.tick();
+    t3 += 120_000;
+  }
+  assert.equal(v3.calls.filter((c) => c.method === "exit").length, MAX_EXIT_ATTEMPTS);
 });
 
 test("a member with no shares is skipped", async () => {

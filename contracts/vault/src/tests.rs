@@ -174,10 +174,18 @@ fn excess_usdc_is_refunded_too() {
 #[test]
 fn first_join_needs_both_tokens_and_refunds_otherwise() {
     let (mut v, env) = setup();
-    assert_eq!(join(&mut v, &env, "alice.near", 10 * NEAR, 0), 0);
+    // USDC but no NEAR: the first join sets the ratio, so it is refused and the USDC stays pending.
+    assert_eq!(join(&mut v, &env, "alice.near", 0, 100 * USDC), 0);
     assert_eq!(v.get_balances().total_shares.0, 0);
-    assert_eq!(v.get_ledger(Token::Near).refunded.0, 10 * NEAR);
-    assert_books(&v, Token::Near);
+    assert_eq!(v.get_pending(acc("alice.near")).0, 100 * USDC);
+    assert_books(&v, Token::Usdc);
+}
+
+#[test]
+#[should_panic(expected = "ERR_DEPOSIT_TOO_SMALL")]
+fn a_join_without_a_usdc_deposit_waiting_is_refused() {
+    let (mut v, env) = setup();
+    join(&mut v, &env, "alice.near", 10 * NEAR, 0);
 }
 
 #[test]

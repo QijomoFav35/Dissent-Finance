@@ -13,6 +13,8 @@ export class Rpc {
     this.tries = opts.tries ?? 4;
     this.timeoutMs = opts.timeoutMs ?? 15_000;
     this.fetch = opts.fetchImpl ?? fetch;
+    // "final" is safe for agents; scripts that read back their own writes use "optimistic".
+    this.finality = opts.finality ?? "final";
   }
 
   async query(params) {
@@ -23,12 +25,18 @@ export class Rpc {
         const res = await this.fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: "agent", method: "query", params: { finality: "final", ...params } }),
+          body: JSON.stringify({ jsonrpc: "2.0", id: "agent", method: "query", params: { finality: this.finality, ...params } }),
           signal: AbortSignal.timeout(this.timeoutMs),
         });
         if (res.status === 429) throw new Error(`rate limited by ${url}`);
         const json = await res.json();
-        if (json.error) throw new Error(`${url}: ${JSON.stringify(json.error).slice(0, 300)}`);
+        if (json.error) {
+          const text = JSON.stringify(json.error);
+          const err = new Error(`${url}: ${text.slice(0, 300)}`);
+          // "This account or key does not exist" is an answer, not a transport failure: don't retry it.
+          if (/UNKNOWN_ACCOUNT|UNKNOWN_ACCESS_KEY|does not exist while viewing/.test(text)) err.contractError = true;
+          throw err;
+        }
         if (json.result?.error) {
           // A contract panic is an answer, not a transport failure: do not retry it.
           const err = new Error(json.result.error);

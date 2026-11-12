@@ -132,7 +132,7 @@ impl Harness {
                 let pending = self.v.get_pending(who.clone()).0;
                 let window_open = !self.v.get_open_spends().is_empty();
                 self.at(&who, near);
-                if window_open || (near == 0 && pending == 0) {
+                if window_open || (near == 0 && pending == 0) || pending < MIN_JOIN_USDC {
                     // Invariant 7: no join while a window is open.
                     return self.expect_panic(|v| {
                         let _ = v.join();

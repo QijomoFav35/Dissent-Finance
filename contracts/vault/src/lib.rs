@@ -272,6 +272,9 @@ impl Vault {
         let near_in = env::attached_deposit().as_yoctonear();
         let usdc_in = self.pending_usdc.get(&account).copied().unwrap_or(0);
         require!(near_in > 0 || usdc_in > 0, ERR_EMPTY_DEPOSIT);
+        // Every join needs a real USDC deposit waiting, so a refused join (and the refund it sends)
+        // always costs the caller at least MIN_JOIN_USDC locked in the vault until they take it back.
+        require!(usdc_in >= MIN_JOIN_USDC, ERR_DEPOSIT_TOO_SMALL);
         // Room for one more member's entries, checked before anything is promised.
         self.joining_near += near_in;
         require!(self.storage_ok(RESERVE_PER_MEMBER_BYTES), ERR_STORAGE);
