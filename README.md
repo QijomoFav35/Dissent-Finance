@@ -122,7 +122,7 @@ What happened (the three exits landed before the cancel; the contract refuses a 
 | Alice's agent exits (the spend was 60% of the fund, her limit is 20%) | [7GZAggTS](https://nearblocks.io/txns/7GZAggTS73tcV3ygJT3hzmzWWBrFwgFnVBGXd9GY1RRF) |
 | Cara's agent cancels spend 0, now unaffordable | [EdWntKHf](https://nearblocks.io/txns/EdWntKHfbXwLudqv9ZNMbyEnquCPvpCMVNTVz9knPXvh) |
 
-Nobody acted by hand after Cara's vote. The spend was cancelled 46 seconds after it was queued; most of that time went on the public RPC endpoints rate-limiting the five agents. Afterwards Alice, Dan and Emma each held exactly 0.2 USDC, Ben held none, and the vault held 0.4 USDC and 0.2 NEAR for Ben and Cara. Ben and Cara's agents wrote notes saying stay, since they approved. All five notes are in `agent/mainnet/notes/`, and each exit carries its note's hash on chain.
+Nobody acted by hand after Cara's vote. By the vault's own timestamps the spend was queued at 21:11:12 UTC, the three exits landed at 21:11:50 and 21:11:51, and the cancel at 21:12:03, 51 seconds after the queue. Most of that time went on the public RPC endpoints rate-limiting the five agents. Afterwards Alice, Dan and Emma each held exactly 0.2 USDC, Ben held none, and the vault held 0.4 USDC and 0.2 NEAR for Ben and Cara. Ben and Cara's agents wrote notes saying stay, since they approved. All five notes are in `agent/mainnet/notes/`, and each exit carries its note's hash on chain.
 
 Ben's agent key was then used to try a USDC `ft_transfer`. The NEAR runtime rejected the transaction before it ran, with `Deposit is not allowed with function call`: a token transfer needs 1 yoctoNEAR attached, and these keys can't attach any, so they can't move tokens at all.
 

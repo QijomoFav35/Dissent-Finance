@@ -90,7 +90,7 @@
   <div class="notes" id="notes"><div class="panel pending">…</div></div>
 
   <h2>Members now</h2>
-  <div class="panel scroll"><table><thead><tr><th>Member</th><th>Shares in the vault</th><th>USDC in their wallet</th></tr></thead><tbody id="members"><tr><td colspan="3" class="pending">…</td></tr></tbody></table></div>
+  <div class="panel scroll"><table><thead><tr><th>Member</th><th>In the vault</th><th>USDC in their wallet</th></tr></thead><tbody id="members"><tr><td colspan="3" class="pending">…</td></tr></tbody></table></div>
 
   <h2>Check it without this page</h2>
   <p>With <code>near</code> CLI. None of these need an account.</p>
@@ -262,7 +262,8 @@ async function load() {
     const mrows = await Promise.all(MEMBERS.map(async (m) => {
       const [sh, held] = await Promise.all([view(VAULT, "get_shares", { account_id: m }), view(USDC, "ft_balance_of", { account_id: m })]);
       const left = sh === "0";
-      return `<tr><td>${short(m)}</td><td>${left ? '<span class="pill exit">left</span>' : `${esc(sh)} <span class="pill stay">stayed</span>`}</td><td>${usdc(held)}</td></tr>`;
+      const pct = left || BigInt(balances.total_shares) === 0n ? 0 : Number((BigInt(sh) * 1000n) / BigInt(balances.total_shares)) / 10;
+      return `<tr><td>${short(m)}</td><td>${left ? '<span class="pill exit">left</span>' : `${pct}% of the vault <span class="pill stay">stayed</span>`}</td><td>${usdc(held)}</td></tr>`;
     }));
     $("members").innerHTML = mrows.join("");
 
