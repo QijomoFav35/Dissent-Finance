@@ -18,7 +18,7 @@ import path from "node:path";
 import { KeyPair } from "near-api-js";
 import { ROOT, USDC, DAO, VAULT, member, milli, NEAR, PROPOSAL_BOND, RPCS, log, near, usdc, signerFor, view, call, record, explorer, rpc, balance } from "./lib.mjs";
 import { KeyCaller, MARKET_METHODS } from "../src/chain.js";
-import { MarketAgent } from "../src/market.js";
+import { MarketAgent, REF, NEAR_USDC_POOL, nearPriceFromPool } from "../src/market.js";
 import { VaultReader } from "../src/vault.js";
 import { Rpc } from "../src/rpc.js";
 
@@ -29,13 +29,12 @@ const REJOIN = ["alice", "dan", "emma"];
 const JOIN_USDC = 100_000n; // 0.1 USDC each, the vault's minimum join
 const BID_FUNDS = 100_000n; // 0.1 USDC each for bidding
 const OFFER_VALUE = 90_000n; // what Cara's offer is worth: under every agent's 0.1 USDC cap
-// What each member counts 1 NEAR as, in USDC units, when pricing the NEAR side of shares. Set by the
-// member, not read from any oracle. Override with --near-price <usdc units>.
-const NEAR_PRICE = process.argv.includes("--near-price") ? BigInt(process.argv[process.argv.indexOf("--near-price") + 1]) : 3_000_000n;
+// The NEAR price comes from the chain: Ref Finance's NEAR/USDC pool, read when Cara prices her offer
+// and again by each agent at every tick (near_price "pool"). Nobody types it in.
 const MARKET_RULES = {
-  alice: { enabled: true, max_price_bps: 9500, max_spend: "100000", near_price: String(NEAR_PRICE) },
-  dan: { enabled: true, max_price_bps: 9800, max_spend: "100000", near_price: String(NEAR_PRICE) },
-  emma: { enabled: true, max_price_bps: 9200, max_spend: "100000", near_price: String(NEAR_PRICE) },
+  alice: { enabled: true, max_price_bps: 9500, max_spend: "100000", near_price: "pool" },
+  dan: { enabled: true, max_price_bps: 9800, max_spend: "100000", near_price: "pool" },
+  emma: { enabled: true, max_price_bps: 9200, max_spend: "100000", near_price: "pool" },
 };
 // Exit rules set again after the rejoin. Alice's is the README story's; Dan's and Emma's are loosened
 // so the spend in the approver story breaks nobody's rules.
@@ -215,6 +214,9 @@ async function auction() {
     const lu = await view(VAULT, "get_ledger", { token: "Usdc" });
     const ln = await view(VAULT, "get_ledger", { token: "Near" });
     const total = BigInt(b.total_shares);
+    const pool = await view(REF, "get_pool", { pool_id: NEAR_USDC_POOL });
+    const NEAR_PRICE = nearPriceFromPool(pool);
+    log(`NEAR price from ${REF} pool ${NEAR_USDC_POOL}: ${usdc(NEAR_PRICE)} USDC (reserves ${JSON.stringify(pool.amounts)})`);
     const worth = (n) => ((BigInt(lu.balance) - BigInt(lu.held)) * n) / total + ((((BigInt(ln.balance) - BigInt(ln.held)) * n) / total) * NEAR_PRICE) / NEAR;
     // Each agent can lock at most 0.1 USDC, so Cara offers shares worth about 0.09 USDC.
     const all = worth(shares);
@@ -227,7 +229,7 @@ async function auction() {
     // Offering shares takes Cara's own key; agent keys can only bid and settle.
     await step("cara offers part of her shares, with her own key", "gas", async () => {
       const h = await call(signerFor(cara), VAULT, "offer_shares", { shares: String(half), reserve: String(reserve) }, { tgas: 30 });
-      record("offer", { seller: cara, shares: String(half), reserve: String(reserve), value: String(value), near_price: String(NEAR_PRICE), tx: h });
+      record("offer", { seller: cara, shares: String(half), reserve: String(reserve), value: String(value), near_price: String(NEAR_PRICE), price_source: `${REF} pool ${NEAR_USDC_POOL}`, pool_amounts: pool.amounts, tx: h });
       return h;
     });
     if (!GO) return;
@@ -245,7 +247,7 @@ async function auction() {
     for (const [i, a] of agents.entries()) {
       try {
         const r = await a.tick();
-        for (const b of r.bids) record("market_bid", { offer_id: b.offer, bidder: member(REJOIN[i]), usdc: b.amount, value: b.value, limit: b.limit, tx: b.tx, source: "market agent" });
+        for (const b of r.bids) record("market_bid", { offer_id: b.offer, bidder: member(REJOIN[i]), usdc: b.amount, value: b.value, limit: b.limit, near_price: String(a.lastNearPrice), tx: b.tx, source: "market agent" });
         for (const s of r.settled) if (s.tx) record("market_settle", { offer_id: s.offer, by: member(REJOIN[i]), tx: s.tx, source: "market agent" });
       } catch (e) {
         log(`[${REJOIN[i]}] tick failed: ${String(e?.message ?? e).slice(0, 120)}`);

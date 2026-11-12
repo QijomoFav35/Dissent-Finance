@@ -1,7 +1,7 @@
 // The market agent's decisions, the agent loop against a stand-in vault, and the 20-agent simulation.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shareValue, minBid, decideBid, MarketAgent } from "../src/market.js";
+import { shareValue, minBid, decideBid, MarketAgent, nearPriceFromPool, USDC_TOKEN } from "../src/market.js";
 import { simulate, summary } from "../sim/market.js";
 
 const USDC = 1_000_000n;
@@ -50,6 +50,28 @@ test("an agent never bids on its own offer, against itself, or with the market o
   assert.equal(decideBid({ offer: offer(), me: "dan.near", rules: rules({ enabled: false }), value, funds: 100n * USDC }).why, "market off");
 });
 
+// Pool 4512's reserves as read from mainnet on 12 November 2026.
+const pool4512 = { pool_kind: "SIMPLE_POOL", token_account_ids: [USDC_TOKEN, "wrap.near"], amounts: ["936679615720", "272450586547781107276376712106"], total_fee: 30 };
+
+test("the on-chain NEAR price is the ratio of the Ref pool's reserves; a wrong or thin pool is refused", () => {
+  assert.equal(nearPriceFromPool(pool4512), 3_437_979n, "3.437979 USDC per NEAR");
+  // Token order does not matter.
+  assert.equal(nearPriceFromPool({ ...pool4512, token_account_ids: ["wrap.near", USDC_TOKEN], amounts: [pool4512.amounts[1], pool4512.amounts[0]] }), 3_437_979n);
+  assert.throws(() => nearPriceFromPool({ ...pool4512, token_account_ids: [USDC_TOKEN, "usdt.tether-token.near"] }), /not wrap.near\/USDC/);
+  assert.throws(() => nearPriceFromPool({ ...pool4512, amounts: ["57908", "12456662268360879122539"] }), /too thin/);
+  assert.throws(() => nearPriceFromPool({ ...pool4512, pool_kind: "STABLE_SWAP" }), /not a price/);
+});
+
+test("when the pool cannot be read the agent skips bidding but still settles ended offers", async () => {
+  const nowMs = 1_000_000;
+  const s = standIn({ offers: [offer({ id: 1 }), offer({ id: 2, ends_at: String(BigInt(nowMs - 1) * 1_000_000n) })], now: nowMs });
+  s.reader.refPool = async () => { throw new Error("rpc timeout"); };
+  const agent = new MarketAgent({ member: "dan.near", rules: rules({ near_price: "pool" }), reader: s.reader, caller: s.caller, now: s.now });
+  const r = await agent.tick();
+  assert.deepEqual(s.calls, [["settle", 2]]);
+  assert.match(r.skipped[0].why, /no NEAR price: rpc timeout/);
+});
+
 function standIn({ offers, now }) {
   const calls = [];
   return {
@@ -60,6 +82,7 @@ function standIn({ offers, now }) {
       ledger: async (t) => (t === "Usdc" ? { balance: String(500n * USDC), held: "0" } : { balance: "0", held: "0" }),
       openSpends: async () => [],
       bidFunds: async () => 60n * USDC,
+      refPool: async () => pool4512,
     },
     caller: {
       bid: async (id, amount) => (calls.push(["bid", id, String(amount)]), { ok: true, hash: `tx-bid-${id}` }),
@@ -78,6 +101,16 @@ test("the agent bids on open offers and settles the ones that have ended", async
   assert.deepEqual(s.calls, [["bid", 1, String(45n * USDC)], ["settle", 2], ["settle", 9]]);
   assert.deepEqual(r.settled.map((x) => x.offer), [2, 9], "an offer someone else settled first counts as settled");
   assert.deepEqual(r.skipped, [{ offer: 3, why: "own offer" }]);
+});
+
+test("with near_price \"pool\" the agent prices the NEAR side from the chain at every tick", async () => {
+  const s = standIn({ offers: [offer({ id: 1, reserve: "1" })], now: 0 });
+  s.reader.ledger = async (t) => (t === "Usdc" ? { balance: "0", held: "0" } : { balance: String(500n * 10n ** 24n), held: "0" });
+  const agent = new MarketAgent({ member: "dan.near", rules: rules({ near_price: "pool" }), reader: s.reader, caller: s.caller, now: s.now });
+  const r = await agent.tick();
+  assert.equal(agent.lastNearPrice, 3_437_979n);
+  // 50 of 500 shares: a tenth of 500 NEAR is 50 NEAR, at 3.437979 USDC.
+  assert.equal(r.bids[0].value, String(50n * 3_437_979n));
 });
 
 test("the agent stops bidding when its funds run out across offers", async () => {

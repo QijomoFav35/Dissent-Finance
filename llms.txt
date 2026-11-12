@@ -23,7 +23,7 @@ On the page, "Try it, no wallet" loads agent/src/rules.js from the repo and runs
 
 ## Tests
 
-- `cd agent && npm ci && npm test`: 48 tests. Agent decisions and retries, note hashing, rules, the swarm simulation, the market agent and its 20-agent simulation, the guard refusing any key broader than an agent key, and verify.mjs against a stand-in for mainnet with four planted faults it must catch.
+- `cd agent && npm ci && npm test`: 51 tests. Agent decisions and retries, note hashing, rules, the swarm simulation, the market agent and its 20-agent simulation, the guard refusing any key broader than an agent key, and verify.mjs against a stand-in for mainnet with four planted faults it must catch.
 - `cd tests/page && npm install && npx playwright install chromium && npm test`: 9 tests of the demo page in headless Chromium.
 - `cd contracts/vault && cargo test --lib`: 82 tests, two of them property tests (shares add up, books balance per token, exits pay exactly pro rata less what is held back for spends the leaver approved, bid funds add up, nothing executes early or twice).
 - `cargo test --test sputnik_flow`, `cargo test --test swarm_scenario -- --nocapture`: sandbox tests with the real Sputnik DAO code, real proposals and votes, five separate agent processes.
@@ -38,7 +38,7 @@ On the page, "Try it, no wallet" loads agent/src/rules.js from the repo and runs
 - [contracts/vault/tests/](https://github.com/QijomoFav35/Dissent-Finance/tree/main/contracts/vault/tests): sandbox tests; `res/sputnikdao2.wasm` is the DAO code the mainnet factory deploys.
 - [agent/src/agent.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/agent.js): the exit agent: reads open spends, applies the member's rules, writes a note, exits with its hash, cancels an unaffordable spend.
 - [agent/src/rules.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/rules.js), [note.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/note.js), [watch.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/watch.js): rules, canonical note hashing, the watcher (one process per member key).
-- [agent/src/market.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/market.js), [agent/sim/market.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/sim/market.js): the market agent (values shares, bids the least that leads up to its member's limit, settles ended offers) and the 20-agent auction simulation.
+- [agent/src/market.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/market.js), [agent/sim/market.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/sim/market.js): the market agent (values shares with the NEAR price read on chain from Ref Finance's NEAR/USDC pool, bids the least that leads up to its member's limit, settles ended offers) and the 20-agent auction simulation.
 - [agent/mainnet/](https://github.com/QijomoFav35/Dissent-Finance/tree/main/agent/mainnet): the mainnet scripts, `evidence.jsonl` (every transaction), the published notes, `verify.mjs`, `guard.mjs`.
 - [docs/index.html](https://github.com/QijomoFav35/Dissent-Finance/blob/main/docs/index.html): the live page, one file, no build step.
 

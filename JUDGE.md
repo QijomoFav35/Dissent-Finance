@@ -44,7 +44,7 @@ near contract verify deployed-at vault.dissentfinance.near network-config mainne
 
 ## 3. Tests
 
-See [README, Run it yourself](README.md#run-it-yourself): `npm test` in `agent/` (48 tests, including `verify.mjs` against a stand-in for mainnet with four planted faults it must catch), `npm test` in `tests/page/` (9 tests of the demo page in headless Chromium), `cargo test --lib` in `contracts/vault/` (82 tests, two of them property tests), `cargo test --test sputnik_flow` and `cargo test --test swarm_scenario` (sandbox tests against the real Sputnik DAO contract), `node agent/sim/swarm.js` (a replay of real DAO spends with 30 rule profiles) and `node agent/sim/market.js` (20 market agents through 30 share auctions).
+See [README, Run it yourself](README.md#run-it-yourself): `npm test` in `agent/` (51 tests, including `verify.mjs` against a stand-in for mainnet with four planted faults it must catch), `npm test` in `tests/page/` (9 tests of the demo page in headless Chromium), `cargo test --lib` in `contracts/vault/` (82 tests, two of them property tests), `cargo test --test sputnik_flow` and `cargo test --test swarm_scenario` (sandbox tests against the real Sputnik DAO contract), `node agent/sim/swarm.js` (a replay of real DAO spends with 30 rule profiles) and `node agent/sim/market.js` (20 market agents through 30 share auctions).
 
 ## 4. Agents on duty
 

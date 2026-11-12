@@ -30,6 +30,10 @@ export class VaultReader {
   ledger(token) {
     return this.rpc.view(this.vaultId, "get_ledger", { token });
   }
+  /** A Ref Finance pool's reserves, for the on-chain NEAR price. */
+  refPool(poolId) {
+    return this.rpc.view("v2.ref-finance.near", "get_pool", { pool_id: poolId });
+  }
   async bidFunds(accountId) {
     return BigInt(await this.rpc.view(this.vaultId, "get_bid_funds", { account_id: accountId }));
   }

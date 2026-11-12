@@ -5,8 +5,10 @@
 //   max_price_bps   the most it pays, as basis points of what the shares are worth (9500 = 95%)
 //   max_spend       the most USDC (6-decimal units) it locks in one bid
 //   enabled         false to never bid
-//   near_price      what the member counts 1 NEAR as, in USDC units (bids are in USDC; shares also
-//                   carry part of the fund's NEAR). 0 or missing counts the NEAR side as nothing.
+//   near_price      what 1 NEAR is worth in USDC units (bids are in USDC; shares also carry part of
+//                   the fund's NEAR). "pool" reads it on chain at every tick from Ref Finance's
+//                   NEAR/USDC pool (see nearPriceFromPool); a number fixes it; 0 or missing counts
+//                   the NEAR side as nothing.
 //
 // What shares are worth: their pro-rata part of the fund's USDC, less their part of every open USDC
 // spend as if those spends paid (buyers inherit the spends), plus the same for NEAR at the member's
@@ -14,6 +16,29 @@
 // so it is counted once: in the balance, against the full spend.
 
 const YOCTO = 10n ** 24n;
+
+// The on-chain price: Ref Finance's NEAR/native-USDC pool 4512, the deepest such pool (about 940k
+// USDC against 272k NEAR on 12 November 2026). The price is the ratio of its reserves, read with its
+// own view call at every tick (it may come from a slightly different block than the vault's views).
+export const REF = "v2.ref-finance.near";
+export const NEAR_USDC_POOL = 4512;
+export const USDC_TOKEN = "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
+/** A pool thinner than this is not trusted as a price: 100,000 USDC. */
+export const MIN_POOL_USDC = 100_000n * 1_000_000n;
+
+/** USDC units per 1 NEAR from a Ref pool's reserves (`get_pool`). Throws on a wrong or thin pool. */
+export function nearPriceFromPool(pool, usdcId = USDC_TOKEN) {
+  const ids = pool?.token_account_ids ?? [];
+  const n = ids.indexOf("wrap.near");
+  const u = ids.indexOf(usdcId);
+  if (ids.length !== 2 || n < 0 || u < 0) throw new Error(`pool is not wrap.near/USDC: ${JSON.stringify(ids)}`);
+  // Only a constant-product pool's reserves are a price; a stable or rated pool's are not.
+  if (pool.pool_kind !== "SIMPLE_POOL") throw new Error(`pool kind ${pool.pool_kind} is not a price`);
+  const nearRes = BigInt(pool.amounts[n]);
+  const usdcRes = BigInt(pool.amounts[u]);
+  if (usdcRes < MIN_POOL_USDC || nearRes === 0n) throw new Error(`pool too thin to price NEAR: ${usdcRes} USDC units`);
+  return (usdcRes * YOCTO) / nearRes;
+}
 
 /** USDC value of `shares`, in units. */
 export function shareValue(shares, { freeUsdc, totalShares, openSpendsUsdc = 0n, freeNear = 0n, nearPrice = 0n }) {
@@ -79,7 +104,15 @@ export class MarketAgent {
     const nearSpends = spends.filter((s) => s.token === "Near").reduce((a, s) => a + BigInt(s.amount), 0n);
     const nearBal = BigInt(ledgerNear.balance);
     const freeNear = nearBal > nearSpends ? nearBal - nearSpends : 0n;
-    const nearPrice = BigInt(this.rules?.near_price ?? 0);
+    // Without a price the agent does not bid this tick, but it still settles: settling needs none.
+    let nearPrice = null;
+    let priceError = null;
+    try {
+      nearPrice = this.rules?.near_price === "pool" ? nearPriceFromPool(await this.reader.refPool(NEAR_USDC_POOL)) : BigInt(this.rules?.near_price ?? 0);
+    } catch (e) {
+      priceError = String(e?.message ?? e).slice(0, 120);
+    }
+    this.lastNearPrice = nearPrice;
     const totalShares = BigInt(balances.total_shares);
     const nowNs = BigInt(this.now()) * 1_000_000n;
     const out = { bids: [], settled: [], skipped: [] };
@@ -88,6 +121,10 @@ export class MarketAgent {
       if (nowNs >= BigInt(offer.ends_at)) {
         const r = await this.caller.settleOffer(offer.id);
         if (r.ok || /ERR_OFFER_CLOSED/.test(JSON.stringify(r.failure ?? ""))) out.settled.push({ offer: offer.id, tx: r.hash });
+        continue;
+      }
+      if (nearPrice == null) {
+        out.skipped.push({ offer: offer.id, why: `no NEAR price: ${priceError}` });
         continue;
       }
       const value = shareValue(BigInt(offer.shares), { freeUsdc, totalShares, openSpendsUsdc, freeNear, nearPrice });
