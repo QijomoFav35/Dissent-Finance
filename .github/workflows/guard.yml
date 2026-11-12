@@ -1,0 +1,57 @@
+# Keeps Ben's and Cara's agents on duty for vault2.dissentfinance.near, the members still in it.
+# Each run watches for just under six hours. A new run is scheduled every five hours and waits in
+# the queue (concurrency below) until the current one ends, so the next shift starts about a
+# minute after the last one stops. Each agent runs in its own process with only its own
+# member's key, from the repository secrets BEN_AGENT_KEY and CARA_AGENT_KEY. Those are the agents'
+# function-call keys: on chain they can call only exit and cancel_spend on the vault, with no
+# deposit, and an exit can only pay the member's own account. The run refuses any other kind of key.
+# Without the secrets the job logs "no agent keys, nothing to do" and succeeds.
+#
+# Nothing is sent while the vault is quiet. If an approved spend breaks a member's rules, that
+# member's agent writes its note, exits with the note's hash, and the notes are kept as the run's
+# artifact.
+name: Guard
+
+on:
+  schedule:
+    - cron: "7 */5 * * *"
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: How long to watch, in minutes (1 to 350)
+        default: "350"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: guard
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Ben's and Cara's agents
+    runs-on: ubuntu-latest
+    timeout-minutes: 358
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: agent/package-lock.json
+      - run: npm ci
+        working-directory: agent
+      - name: Watch the vault
+        working-directory: agent
+        env:
+          BEN_AGENT_KEY: ${{ secrets.BEN_AGENT_KEY }}
+          CARA_AGENT_KEY: ${{ secrets.CARA_AGENT_KEY }}
+          MINUTES: ${{ github.event.inputs.minutes || '350' }}
+        run: node mainnet/guard.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: guard-notes
+          path: agent/mainnet/notes/guard/
+          if-no-files-found: ignore

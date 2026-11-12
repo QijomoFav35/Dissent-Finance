@@ -1,0 +1,194 @@
+// Loads docs/index.html in headless Chromium with mainnet RPC and the repo's raw files answered
+// from this checkout (v1's real notes, the vault's record as the chain holds it). Checks what a
+// visitor sees: the checks strip, the two outcomes, the notes matching their hashes, no errors and
+// no sideways scroll on a phone.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { chromium } from "playwright";
+
+const here = path.dirname(new URL(import.meta.url).pathname);
+const repo = path.join(here, "..", "..");
+const N = (m) => `${m}.dissentfinance.near`;
+const note = (m, dir = "notes") => JSON.parse(fs.readFileSync(path.join(repo, "agent/mainnet", dir, `0-${N(m)}.json`), "utf8"));
+const ts = (s) => String(BigInt(Date.parse(s)) * 1_000_000n);
+const ev = (event, data, at) => JSON.stringify({ standard: "dissent", version: "1.0.0", event, data: [data], ts: ts(at) });
+
+// v1's run on 11 November, as its record holds it; `later` adds Ben's and Cara's exits from the next day.
+function chain({ later = false, wrongHash = false } = {}) {
+  const record = [];
+  for (const [m, t] of [["alice", "20:56"], ["ben", "20:58"], ["cara", "21:00"], ["dan", "21:02"], ["emma", "21:03"]]) {
+    record.push(ev("join", { account_id: N(m), shares: "100", near: "100000000000000000000000", usdc: "200000" }, `2026-11-11T${t}:01Z`));
+  }
+  record.push(ev("queue_spend", { spend_id: 0, proposal_id: 0, recipient: N("ben"), amount: "600000", approve: 2, not_approve: 0 }, "2026-11-11T21:11:06Z"));
+  for (const [m, t] of [["emma", "21:11:20"], ["dan", "21:11:30"], ["alice", "21:11:40"]]) {
+    record.push(ev("exit", { account_id: N(m), shares: "100", near: "100000000000000000000000", usdc: "200000", reason_hash: wrongHash && m === "dan" ? "0".repeat(64) : note(m).hash }, `2026-11-11T${t}Z`));
+  }
+  record.push(ev("cancel_spend", { spend_id: 0, by: N("cara") }, "2026-11-11T21:11:52Z"));
+  if (later) for (const [m, t] of [["ben", "09:00"], ["cara", "09:01"]]) record.push(ev("exit", { account_id: N(m), shares: "100", near: "100000000000000000000000", usdc: "200000", reason_hash: null }, `2026-11-12T${t}:00Z`));
+  const stayed = later ? [] : [N("ben"), N("cara")];
+  return {
+    vault: "vault.dissentfinance.near",
+    code: "3jWHECjP5BCezXDBPR1XuQzb62KpBYaKZzhMXbmoHtWN",
+    get_balances: { near: later ? "0" : "200000000000000000000000", usdc: later ? "0" : "400000", total_shares: later ? "0" : "200", members: stayed.length, open_spends: 0 },
+    get_spend: { id: 0, proposal_id: 0, recipient: N("ben"), token: "Usdc", amount: "600000", approvers: [N("ben"), N("cara")], objectors: [], window_ends: "1794432072099800003", status: "Cancelled" },
+    get_proposal: { id: 0, status: "Approved", votes: { [N("ben")]: "Approve", [N("cara")]: "Approve" } },
+    get_record_len: record.length,
+    get_record: record,
+    contract_source_metadata: { link: "https://github.com/QijomoFav35/Dissent-Finance/tree/54ccf1b24c629e86ba1cb5d87b9ac80f3eb64f39" },
+    get_shares: (a) => (stayed.includes(a.account_id) ? "100" : "0"),
+    ft_balance_of: (a) => (["alice", "dan", "emma"].some((m) => a.account_id === N(m)) ? "200000" : a.account_id === "vault.dissentfinance.near" ? (later ? "0" : "400000") : "0"),
+    get_ledger: () => ({ balance: later ? "0" : "400000", in_flight: "0", claimable: "0", pending_joins: "0", deposited: "1000000", spent: "0", fees: "0", exited: later ? "1000000" : "600000", refunded: "0" }),
+    get_default_code_hash: "DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF",
+    get_default_version: [3, 2],
+    get_policy: { roles: [{ name: "council", kind: { Group: ["ben", "emma", "dan", "alice", "cara"].map(N) }, permissions: ["*:*"], vote_policy: {} }], default_vote_policy: { weight_kind: "RoleWeight", quorum: "0", threshold: "2" } },
+  };
+}
+
+// v2's run on 12 November, from its published notes.
+function chainV2() {
+  const record = [];
+  for (const m of ["alice", "ben", "cara", "dan", "emma"]) record.push(ev("join", { account_id: N(m), shares: "100", near: "100000000000000000000000", usdc: "200000" }, "2026-11-12T13:10:00Z"));
+  record.push(ev("queue_spend", { spend_id: 0, proposal_id: 1, recipient: N("ben"), amount: "600000", approve: 2, not_approve: 0 }, "2026-11-12T13:31:09Z"));
+  for (const [m, t] of [["alice", "13:31:17"], ["dan", "13:31:17"], ["emma", "13:31:18"]]) record.push(ev("exit", { account_id: N(m), shares: "100", near: "100000000000000000000000", usdc: "200000", reason_hash: note(m, "notes/vault2").hash }, `2026-11-12T${t}Z`));
+  record.push(ev("cancel_spend", { spend_id: 0, by: N("emma") }, "2026-11-12T13:31:21Z"));
+  const base = chain();
+  return {
+    ...base,
+    vault: "vault2.dissentfinance.near",
+    code: "AJBeJNNHfRTP2SXV1q7yzsYVTxHaaV8roipVjJN2G3Zx",
+    get_spend: { ...base.get_spend, proposal_id: 1, window_ends: "1794490869844300751" },
+    get_proposal: { ...base.get_proposal, id: 1 },
+    get_record_len: record.length,
+    get_record: record,
+    contract_source_metadata: { link: "https://github.com/QijomoFav35/Dissent-Finance/tree/3f141922351559fe851c2c52f7489b058ec476a7" },
+    ft_balance_of: (a) => (["alice", "dan", "emma"].some((m) => a.account_id === N(m)) ? "200000" : a.account_id === "vault2.dissentfinance.near" ? "400000" : "0"),
+  };
+}
+
+async function open(views, { width = 1200, query = "?v=vault", guard = { status: "in_progress", run_number: 7 } } = {}) {
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width, height: 900 } });
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+  await page.route(/fastnear|near\.org|drpc|intea/, async (route) => {
+    const body = JSON.parse(route.request().postData());
+    const p = body.params;
+    let result;
+    if (p.request_type === "view_account") result = p.account_id === "dissentfinance.sputnik-dao.near" ? { code_hash: "11111111111111111111111111111111", global_contract_hash: "DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF" } : { code_hash: views.code, amount: "1" };
+    else if (p.request_type === "view_access_key_list") result = { keys: p.account_id.startsWith("vault") ? [] : [{ access_key: { permission: "FullAccess" } }, { access_key: { permission: { FunctionCall: { allowance: "248800000000000000000000", receiver_id: views.vault, method_names: ["exit", "cancel_spend"] } } } }] };
+    else {
+      let v = views[p.method_name];
+      if (typeof v === "function") v = v(JSON.parse(Buffer.from(p.args_base64, "base64").toString()));
+      result = { result: [...Buffer.from(JSON.stringify(v))] };
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ jsonrpc: "2.0", id: body.id, result }) });
+  });
+  await page.route(/raw\.githubusercontent\.com/, async (route) => {
+    const f = path.join(repo, "agent/mainnet", route.request().url().split("/agent/mainnet/")[1]);
+    if (fs.existsSync(f)) await route.fulfill({ status: 200, body: fs.readFileSync(f), headers: { "access-control-allow-origin": "*" } });
+    else await route.fulfill({ status: 404, body: "" });
+  });
+  await page.route(/api\.github\.com/, async (route) => {
+    if (guard === null) return route.fulfill({ status: 403, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ message: "API rate limit exceeded" }) });
+    const run = { ...guard, html_url: "https://github.com/QijomoFav35/Dissent-Finance/actions/runs/1", run_started_at: new Date(Date.now() - 42 * 60000).toISOString() };
+    await route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ workflow_runs: [run] }) });
+  });
+  await page.goto(`file://${path.join(repo, "docs/index.html")}${query}`);
+  await page.waitForFunction(() => !document.getElementById("status").textContent.includes("Reading"), null, { timeout: 20000 });
+  const text = async (sel) => (await page.textContent(sel)).replace(/\s+/g, " ").trim();
+  return { page, errors, text, close: () => browser.close() };
+}
+
+test("the v1 run: every check passes and the two outcomes read from the record", async () => {
+  const p = await open(chain());
+  try {
+    assert.match(await p.text("#status"), /^All checks pass/);
+    assert.match(await p.text("#checks"), /3 of 3 exit notes match the chain/);
+    assert.match(await p.text("#vs-title"), /2 of 5 members approve paying Ben 60% of the fund/);
+    assert.match(await p.text("#vs-left"), /0\.40 USDC left for all 5.*0\.08 instead of 0\.20/);
+    const right = await p.text("#vs-right");
+    assert.match(right, /Emma's agent exits, \+14 s.*Dan's agent exits, \+24 s.*Alice's agent exits, \+34 s.*Spend cancelled, \+46 s/);
+    assert.match(await p.text("#vs-right-foot"), /0 USDC paid out/);
+    assert.equal(await p.page.locator("#notes .ok").count(), 3);
+    assert.equal(await p.page.locator("#timeline tr[data-live]").count(), 5);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});
+
+test("exits after the spend settled are history, not part of the spend", async () => {
+  const p = await open(chain({ later: true }));
+  try {
+    const right = await p.text("#vs-right");
+    assert.doesNotMatch(right, /Ben's agent exits|Cara's agent exits/);
+    assert.equal(await p.page.locator("#timeline tr[data-live]").count(), 5);
+    assert.equal(await p.page.locator("#timeline tr").count(), 12);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});
+
+test("a note whose hash does not match the chain fails the page's check", async () => {
+  const p = await open(chain({ wrongHash: true }));
+  try {
+    assert.match(await p.text("#status"), /^A check failed/);
+    assert.match(await p.text("#checks"), /2 of 3 exit notes match the chain/);
+    assert.match(await p.text("#notes"), /Does not match the hash on chain/);
+  } finally {
+    await p.close();
+  }
+});
+
+test("the proof panel reads the DAO, the agent keys and the books from the chain", async () => {
+  const p = await open(chain());
+  try {
+    await p.page.waitForFunction(() => !document.getElementById("proofrows").textContent.includes("Reading"), null, { timeout: 20000 });
+    const rows = await p.text("#proofrows");
+    assert.match(rows, /PASS\s*The DAO runs unmodified Sputnik code\s*.*Sputnik 3\.2/);
+    assert.match(rows, /PASS\s*The DAO.s policy\s*One council of 5 named members/);
+    assert.match(rows, /PASS\s*Every agent key is limited to exit and cancel_spend\s*5 of 5/);
+    assert.match(rows, /PASS\s*The books balance\s*USDC: 1\.00 in, 0\.60 out to leavers/);
+    assert.doesNotMatch(rows, /FAIL/);
+    assert.equal(await p.page.locator("#keyrows tr").count(), 5);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});
+
+test("v2: its own record and notes, and the guard run on duty in the proof panel", async () => {
+  const p = await open(chainV2(), { query: "" });
+  try {
+    await p.page.waitForFunction(() => !document.getElementById("proofrows").textContent.includes("Reading"), null, { timeout: 20000 });
+    assert.match(await p.text("#status"), /^All checks pass/);
+    assert.match(await p.text("#vs-right"), /Alice's agent exits, \+8 s.*Dan's agent exits, \+8 s.*Emma's agent exits, \+9 s.*Spend cancelled, \+12 s/);
+    assert.match(await p.text("#proofrows"), /PASS\s*Agents on duty\s*A guard run is in progress: run #7, started 42 min ago/);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});
+
+test("v2: when GitHub's API refuses, the guard row says so instead of failing", async () => {
+  const p = await open(chainV2(), { query: "", guard: null });
+  try {
+    await p.page.waitForFunction(() => !document.getElementById("proofrows").textContent.includes("Reading"), null, { timeout: 20000 });
+    assert.match(await p.text("#proofrows"), /INFO\s*Agents on duty\s*GitHub's API did not answer \(403, rate limit\)/);
+  } finally {
+    await p.close();
+  }
+});
+
+test("on a phone the page does not scroll sideways", async () => {
+  const p = await open(chain(), { width: 390 });
+  try {
+    assert.equal(await p.page.evaluate(() => document.documentElement.scrollWidth), 390);
+  } finally {
+    await p.close();
+  }
+});

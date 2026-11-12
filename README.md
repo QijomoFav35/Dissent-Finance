@@ -1,6 +1,8 @@
 # Dissent Finance
 
-Live page, read from mainnet in your browser: https://qijomofav35.github.io/Dissent-Finance/ (v2; v1 at `?v=vault`)
+[![CI](https://github.com/QijomoFav35/Dissent-Finance/actions/workflows/ci.yml/badge.svg)](https://github.com/QijomoFav35/Dissent-Finance/actions/workflows/ci.yml) [![Mainnet checks](https://github.com/QijomoFav35/Dissent-Finance/actions/workflows/watch.yml/badge.svg)](https://github.com/QijomoFav35/Dissent-Finance/actions/workflows/watch.yml) [![Guard](https://github.com/QijomoFav35/Dissent-Finance/actions/workflows/guard.yml/badge.svg)](https://github.com/QijomoFav35/Dissent-Finance/actions/workflows/guard.yml)
+
+Live page, read from mainnet in your browser: https://qijomofav35.github.io/Dissent-Finance/ (v2; v1 at `?v=vault`) · [JUDGE.md](JUDGE.md): a five-minute path and a one-command check · Social Money track · NEAR mainnet, real USDC
 
 A vault for a group's money that sits next to an unchanged Sputnik DAO on NEAR. When the DAO approves a spend from the vault, the spend waits for a fixed window, and any member who did not vote for it can take their share out first. Each member can run an agent that does this for them, using a key that can only call `exit` and `cancel_spend`.
 
@@ -68,7 +70,15 @@ You need Rust 1.95 (pinned in `rust-toolchain.toml`) with the `wasm32-unknown-un
    cd agent && npm install && npm test
    ```
 
-   You should see 30 pass, 0 fail. They include the story above, retries that reuse the same note with a backoff and a cap, a prompt injection in the spend's memo, five separate agents each with only its own key, and the simulation below.
+   You should see 37 pass, 0 fail. They include the story above, retries that reuse the same note with a backoff and a cap, a prompt injection in the spend's memo, five separate agents each with only its own key, the simulation below, the guard refusing any key broader than an agent key, and `verify.mjs` run against a stand-in for mainnet: every check passes on the real state, and three planted faults (a widened agent key, a wrong note hash, unbalanced books) each fail their check.
+
+   The demo page has its own tests, in headless Chromium against a stand-in for mainnet RPC:
+
+   ```
+   cd tests/page && npm install && npx playwright install chromium && npm test
+   ```
+
+   You should see 7 pass: v1's checks and two outcomes read from its record, later exits kept out of the spend, a note whose hash does not match failing the page's check, the proof panel, v2 with the guard run on duty, the guard row when GitHub's API refuses, and no sideways scroll on a phone.
 
 3. Contract unit and property tests.
 
@@ -109,7 +119,16 @@ You need Rust 1.95 (pinned in `rust-toolchain.toml`) with the `wasm32-unknown-un
    node agent/mainnet/verify.mjs --vault vault
    ```
 
-   For v2 and then v1, it fetches every exit transaction in `agent/mainnet/evidence.jsonl` from the chain, reads the exit event the vault logged, and checks its `reason_hash` against the published note, hashed on your machine. It also checks the code hash, the vault's access keys, the spend's status and that each leaver holds no shares. It should end with `All checks passed`.
+   For v2 and then v1, it reads one final block and prints about 19 numbered checks, each PASS, FAIL or INFO:
+
+   - the vault's code hash and the commit its NEP-330 metadata names; its access keys (INFO on v2, which still has its key; FAIL if v1 ever had one); the DAO and token it answers to;
+   - the DAO's code is the code `sputnik-dao.near` publishes as its default, and the same bytes as `contracts/vault/res/sputnikdao2.wasm`, which the sandbox tests deploy; the DAO's policy (one council of the five named members, no Everyone role, two votes);
+   - every member's agent key, read from their own account: a function-call key for `exit` and `cancel_spend` on the vault, nothing more;
+   - spend 0 is `Cancelled`; the DAO proposal is Approved and its `queue_spend` arguments are the spend; the Approve votes are the spend's approvers; the vault's record shows the queue, the exits and the cancel in that order, inside the window;
+   - for each exit, the `reason_hash` in the vault's record equals the hash of the published note, computed on your machine, and so does the one in the exit transaction while the RPC endpoints still serve it (older transactions need an archival node; the line says which was compared); leavers hold no shares;
+   - the remaining shares add up; the USDC and NEAR books balance (held = deposited - spent - fees - exited - refunded); the USDC contract's own balance for the vault covers what the vault owes members.
+
+   It should end with `All checks passed`. The exit code is the number of failed checks. `--json` prints the same checks as JSON. The `Mainnet checks` workflow runs it every hour.
 
 ## What agents with varied rules would have done to real contested spends
 
@@ -185,9 +204,11 @@ Should show spend 0 as `Cancelled`, and (since Ben and Cara later left too) a va
 
 ## On mainnet: v2
 
-`vault2.dissentfinance.near` runs the code described above, built reproducibly from commit `6057d0d` (code hash `5Pk3qkYpH61QQpzSVsHyBFqW1XhCYrQQvYirS7npeMuK`). It uses the same DAO, [dissentfinance.sputnik-dao.near](https://nearblocks.io/address/dissentfinance.sputnik-dao.near), and the same five members, who each joined with 0.1 NEAR and 0.2 USDC (Ben and Cara first took their 0.2 USDC out of v1 with their v1 agent keys: [A3N4hcUd](https://nearblocks.io/txns/A3N4hcUdexfttBQVedJvZ4ijMwwDiVzwMVJUVGNB3UVQ), [2tYQmA9P](https://nearblocks.io/txns/2tYQmA9PnBD9feRLbCxJy1QpbsNhrGCBmocNcUHSFCtt)).
+`vault2.dissentfinance.near` runs the code described above, built reproducibly from commit `3f14192` (code hash `AJBeJNNHfRTP2SXV1q7yzsYVTxHaaV8roipVjJN2G3Zx`; `near contract verify deployed-at vault2.dissentfinance.near network-config mainnet now` rebuilds it). It uses the same DAO, [dissentfinance.sputnik-dao.near](https://nearblocks.io/address/dissentfinance.sputnik-dao.near), and the same five members, who each joined with 0.1 NEAR and 0.2 USDC (Ben and Cara first took their 0.2 USDC out of v1 with their v1 agent keys: [A3N4hcUd](https://nearblocks.io/txns/A3N4hcUdexfttBQVedJvZ4ijMwwDiVzwMVJUVGNB3UVQ), [2tYQmA9P](https://nearblocks.io/txns/2tYQmA9PnBD9feRLbCxJy1QpbsNhrGCBmocNcUHSFCtt)).
 
-Before going live, v2 was reviewed three times by an independent reviewer that had not seen it being built. Each review found something (a storage loop through bouncing claims, a transfer check that could count a delivered payment as failed, agent retries that could drain a key's gas allowance, joins with no USDC behind them), and each was fixed and tested before the next step. The vault was deployed while it still had its key, so the last fix went in as a code-only redeploy ([GtacaTNB](https://nearblocks.io/txns/GtacaTNBVg2eD6Go7m8JPmTnuA4KM9CU7p2JjEpzf9Cx)) that kept every member's balance.
+Before going live, v2 was reviewed three times by an independent reviewer that had not seen it being built. Each review found something (a storage loop through bouncing claims, a transfer check that could count a delivered payment as failed, agent retries that could drain a key's gas allowance, joins with no USDC behind them), and each was fixed and tested before the next step. The vault was deployed while it still had its key, so the last fix went in as a code-only redeploy ([GtacaTNB](https://nearblocks.io/txns/GtacaTNBVg2eD6Go7m8JPmTnuA4KM9CU7p2JjEpzf9Cx)) that kept every member's balance. After the live run below, a fourth review found two more: an exit reason with no length cap, and join share maths that could overflow. Both were fixed and tested in `3f14192` and went in the same way, as a code-only redeploy ([6SKeWDGM](https://nearblocks.io/txns/6SKeWDGMMYGRFvT1Cs5nKJfJ39mQb5m2U3WCkvSuS6fd)) that touched no balance. v2 still has its full-access key while the last checks run; v1 shows the keyless end state.
+
+The DAO is a stock mainnet Sputnik DAO, so [Trezu](https://trezu.app/dissentfinance.sputnik-dao.near/requests?tab=Approved) lists it like any treasury: both spends appear under Requests, Executed, as `queue_spend` calls on the two vaults, each with 2 approving votes (2 needed) ([screenshot](docs/images/trezu-requests.jpg)).
 
 The same story, live on 12 November 2026:
 
@@ -223,6 +244,12 @@ near contract call-function as-read-only vault2.dissentfinance.near get_balances
 
 v2 still has its full-access key while it is reviewed once more. Deleting it is the last step.
 
+## Agents on duty
+
+`.github/workflows/guard.yml` keeps Ben's and Cara's agents, the members still in v2, watching `vault2.dissentfinance.near` around the clock. Each run watches for just under six hours; the next run is scheduled before the current one ends and waits in the queue, so a new shift starts about a minute after the last one ends (GitHub can delay scheduled runs, and a delay longer than the 10-minute spend window would leave a gap). A watcher that stops is restarted, and one that keeps stopping fails the run. Each agent runs in its own process with only its own member's key, read from the repository secrets `BEN_AGENT_KEY` and `CARA_AGENT_KEY`. Before starting, `agent/mainnet/guard.mjs` reads each key from the chain and refuses it unless it is a function-call key that can call only `exit` and `cancel_spend` on the vault. Such a key cannot move funds anywhere but the member's own account, so it is safe to keep in CI: if it leaked, the worst a holder could do is take that member out of the vault into their own wallet, cancel a spend the vault can no longer pay anyway, or burn the key's gas allowance (about 0.25 NEAR). Nothing is sent while the vault is quiet. The page's Proof section shows whether a guard run is watching now.
+
+To run it yourself with your own agent keys, from `agent/`: `BEN_AGENT_KEY=... CARA_AGENT_KEY=... MINUTES=5 node mainnet/guard.mjs`.
+
 ## Layout
 
 ```
@@ -230,6 +257,10 @@ contracts/vault       the vault contract, unit tests, property tests, sandbox te
 contracts/test-usdc   a NEP-141 token with open mint, for tests only
 agent/src             the exit agent: rules, notes, reader, limited-key signer, watcher
 agent/sim             the swarm replay
+agent/mainnet         the mainnet scripts, evidence.jsonl, published notes, verify.mjs, guard.mjs
+tests/page            headless tests of the demo page
+docs                  the live page (GitHub Pages), its Trezu screenshot, llms.txt
+.github/workflows     ci.yml (every test), watch.yml (hourly mainnet checks), guard.yml (agents on duty)
 scripts               fetch-sputnik.mjs, replay3.mjs
 replay3.json          the replay data used by the simulation
 ```

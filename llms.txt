@@ -1,0 +1,46 @@
+# Dissent Finance
+
+> A vault next to an unchanged Sputnik DAO on NEAR mainnet. When the DAO approves a spend, it waits
+> for a fixed window, and members who did not approve can leave with their exact pro-rata share
+> first; if the vault can then no longer pay, the spend is cancelled. Each member's agent watches for
+> them with a function-call key that can call only `exit` and `cancel_spend`. Live on mainnet with
+> real USDC: vault.dissentfinance.near (v1, keyless) and vault2.dissentfinance.near (v2), DAO
+> dissentfinance.sputnik-dao.near. NEAR HACKATHON, Social Money track.
+
+Live page (reads mainnet in the browser): https://qijomofav35.github.io/Dissent-Finance/
+Trezu view of the DAO: https://trezu.app/dissentfinance.sputnik-dao.near/requests?tab=Approved
+
+## Start here
+
+- [JUDGE.md](https://github.com/QijomoFav35/Dissent-Finance/blob/main/JUDGE.md): five-minute path, the track requirements against live proof, one-command check.
+- [README](https://github.com/QijomoFav35/Dissent-Finance/blob/main/README.md): how it works, known limits, every test with its expected output, the mainnet runs with transaction links.
+
+## Check it (read-only, Node 20+, no keys, no installs)
+
+- `node agent/mainnet/verify.mjs` checks v2, `--vault vault` checks v1, `--json` prints JSON. About 19 numbered PASS/FAIL/INFO checks at one final block: vault code hash and NEP-330 source, access keys, vault config, the DAO's code equal to the factory's published default and to the bytes the sandbox tests deploy, DAO policy, every member's agent key permissions, spend 0 cancelled, the DAO proposal's arguments equal to the queued spend, the votes, the record's order, every exit's reason_hash equal to the hash of its published note, leavers holding no shares, shares adding up, books balancing for USDC and NEAR, and the USDC contract's own balance for the vault. Exit code = number of failures.
+- `near contract verify deployed-at vault2.dissentfinance.near network-config mainnet now` rebuilds the deployed code from source.
+
+## Tests
+
+- `cd agent && npm ci && npm test`: 37 tests. Agent decisions and retries, note hashing, rules, the swarm simulation, the guard refusing any key broader than an agent key, and verify.mjs against a stand-in for mainnet with three planted faults it must catch.
+- `cd tests/page && npm install && npx playwright install chromium && npm test`: 7 tests of the demo page in headless Chromium.
+- `cd contracts/vault && cargo test --lib`: 64 tests, two of them property tests (shares add up, books balance per token, exits pay exactly pro rata, nothing executes early or twice).
+- `cargo test --test sputnik_flow`, `cargo test --test swarm_scenario -- --nocapture`: sandbox tests with the real Sputnik DAO code, real proposals and votes, five separate agent processes.
+- GitHub Actions: `.github/workflows/ci.yml` runs the agent, page, contract and sandbox tests on every push; `watch.yml` runs verify.mjs against mainnet every hour; `guard.yml` keeps Ben's and Cara's agents watching vault2 around the clock.
+
+## Code map
+
+- [contracts/vault/src/lib.rs](https://github.com/QijomoFav35/Dissent-Finance/blob/main/contracts/vault/src/lib.rs): the vault: join, set_rules, queue_spend (DAO only, after reading the DAO's own proposal back), exit, cancel_spend, execute_spend, claims, the event record, the ledger.
+- [contracts/vault/src/checks.rs](https://github.com/QijomoFav35/Dissent-Finance/blob/main/contracts/vault/src/checks.rs): the byte-for-byte check of the DAO proposal against the queued spend.
+- [contracts/vault/src/tests.rs](https://github.com/QijomoFav35/Dissent-Finance/blob/main/contracts/vault/src/tests.rs), [prop_tests.rs](https://github.com/QijomoFav35/Dissent-Finance/blob/main/contracts/vault/src/prop_tests.rs): unit and property tests.
+- [contracts/vault/tests/](https://github.com/QijomoFav35/Dissent-Finance/tree/main/contracts/vault/tests): sandbox tests; `res/sputnikdao2.wasm` is the DAO code the mainnet factory deploys.
+- [agent/src/agent.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/agent.js): the exit agent: reads open spends, applies the member's rules, writes a note, exits with its hash, cancels an unaffordable spend.
+- [agent/src/rules.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/rules.js), [note.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/note.js), [watch.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/watch.js): rules, canonical note hashing, the watcher (one process per member key).
+- [agent/mainnet/](https://github.com/QijomoFav35/Dissent-Finance/tree/main/agent/mainnet): the mainnet scripts, `evidence.jsonl` (every transaction), the published notes, `verify.mjs`, `guard.mjs`.
+- [docs/index.html](https://github.com/QijomoFav35/Dissent-Finance/blob/main/docs/index.html): the live page, one file, no build step.
+
+## Limits
+
+- Not a veto: dissenters cannot stop a spend, only leave before it pays.
+- Not audited; small real amounts on mainnet.
+- v2 still holds its full-access key while checks run; verify.mjs reports it as INFO. v1 has no keys.

@@ -1,4 +1,4 @@
 target/
 *.json.bak
-node_modules/
+node_modules
 notes/

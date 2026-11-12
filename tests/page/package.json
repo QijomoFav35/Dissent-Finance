@@ -1,0 +1,8 @@
+{
+  "name": "dissent-page-tests",
+  "private": true,
+  "type": "module",
+  "description": "Headless tests of the live demo page (docs/index.html) against a stand-in for mainnet RPC.",
+  "scripts": { "test": "node --test page.test.js" },
+  "devDependencies": { "playwright": "1.49.1" }
+}

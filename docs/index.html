@@ -7,107 +7,312 @@
 <meta name="description" content="A NEAR group fund where members who did not approve a spend can leave with their share before it pays. Read live from mainnet.">
 <style>
   :root {
-    --bg: #f6f5f1; --panel: #ffffff; --ink: #1b1d1f; --muted: #626a70; --line: #e2e0d9;
-    --accent: #1f5f4a; --accent-soft: #e3efe9; --warn: #8a3b12; --warn-soft: #f6e7dd; --stay: #2f4a7a; --stay-soft: #e4eaf5;
+    --bg: #f7f6f2; --panel: #ffffff; --panel-2: #fbfaf7; --ink: #17191b; --muted: #5d656b; --line: #e4e1d9;
+    --accent: #1d5c47; --accent-soft: #e2efe8; --warn: #8f3a10; --warn-soft: #f7e6da; --stay: #2c4778; --stay-soft: #e3e9f5;
+    --banner: #17191b; --banner-ink: #f7f6f2;
     --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #121416; --panel: #1a1d20; --ink: #e9e7e1; --muted: #9aa3a9; --line: #2b3034;
-      --accent: #7fc4a6; --accent-soft: #1d2f28; --warn: #f0a37a; --warn-soft: #33241c; --stay: #9db7e6; --stay-soft: #1e2636;
+      --bg: #111315; --panel: #191c1f; --panel-2: #15181a; --ink: #ebe9e3; --muted: #9aa3a9; --line: #2a2f33;
+      --accent: #7fc8a8; --accent-soft: #1b2e27; --warn: #f2a67c; --warn-soft: #34251c; --stay: #9fb9e8; --stay-soft: #1d2537;
+      --banner: #ebe9e3; --banner-ink: #111315;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #121416; --panel: #1a1d20; --ink: #e9e7e1; --muted: #9aa3a9; --line: #2b3034;
-    --accent: #7fc4a6; --accent-soft: #1d2f28; --warn: #f0a37a; --warn-soft: #33241c; --stay: #9db7e6; --stay-soft: #1e2636;
+    --bg: #111315; --panel: #191c1f; --panel-2: #15181a; --ink: #ebe9e3; --muted: #9aa3a9; --line: #2a2f33;
+    --accent: #7fc8a8; --accent-soft: #1b2e27; --warn: #f2a67c; --warn-soft: #34251c; --stay: #9fb9e8; --stay-soft: #1d2537;
+    --banner: #ebe9e3; --banner-ink: #111315;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  main { max-width: 920px; margin: 0 auto; padding: 32px 16px 64px; }
-  h1 { font-size: 2rem; margin: 0 0 6px; letter-spacing: -0.01em; }
-  h2 { font-size: 1.15rem; margin: 40px 0 12px; }
-  p { margin: 0 0 12px; }
+  html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
   a { color: var(--accent); }
-  .lede { font-size: 1.08rem; color: var(--muted); max-width: 46em; }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
-  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
-  .stat .k { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-  .stat .v { font-size: 1.05rem; margin-top: 2px; word-break: break-word; }
-  .mono { font-family: var(--mono); font-size: 0.86rem; }
+  code, .mono { font-family: var(--mono); font-size: 0.86em; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+
+  .banner { background: var(--banner); color: var(--banner-ink); font-size: 0.84rem; text-align: center; padding: 7px 16px; }
+  .banner a { color: inherit; }
+  header.top { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  header.top .wrap { display: flex; align-items: center; gap: 18px; height: 56px; }
+  .brand { font-weight: 700; letter-spacing: -0.01em; text-decoration: none; color: var(--ink); white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+  .brand svg { width: 20px; height: 20px; }
+  nav.sections { display: flex; gap: 4px; overflow-x: auto; flex: 1; scrollbar-width: none; }
+  nav.sections a { color: var(--muted); text-decoration: none; font-size: 0.88rem; padding: 6px 10px; border-radius: 6px; white-space: nowrap; }
+  nav.sections a:hover, nav.sections a.on { color: var(--ink); background: var(--panel); }
+  .tools { display: flex; gap: 8px; align-items: center; }
+  .btn { font: inherit; font-size: 0.86rem; background: var(--panel); border: 1px solid var(--line); color: var(--ink); border-radius: 7px; padding: 6px 12px; cursor: pointer; text-decoration: none; white-space: nowrap; }
+  .btn.dark { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .btn:hover { border-color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+  .seg a { padding: 5px 10px; font-size: 0.84rem; text-decoration: none; color: var(--muted); background: var(--panel); }
+  .seg a.on { background: var(--ink); color: var(--bg); }
+  @media (max-width: 760px) { nav.sections { display: none; } header.top .wrap { justify-content: space-between; gap: 10px; } }
+  @media (max-width: 480px) { .tools .btn.dark { display: none; } .brand { font-size: 0.95rem; } }
+
+  section { padding: 56px 0 8px; }
+  .eyebrow { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 8px; }
+  h1 { font-size: clamp(2rem, 4.6vw, 3.1rem); line-height: 1.1; letter-spacing: -0.025em; margin: 0 0 16px; max-width: 18em; }
+  h2 { font-size: clamp(1.4rem, 2.6vw, 1.85rem); line-height: 1.2; letter-spacing: -0.015em; margin: 0 0 10px; }
+  h3 { font-size: 1.02rem; margin: 0 0 6px; }
+  p { margin: 0 0 12px; }
+  .lede { font-size: 1.1rem; color: var(--muted); max-width: 44em; }
+  .sub { color: var(--muted); max-width: 46em; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
   .ok { color: var(--accent); font-weight: 600; }
   .bad { color: var(--warn); font-weight: 600; }
   .pending { color: var(--muted); }
-  .pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 0.8rem; font-weight: 600; }
+  .pill { display: inline-block; padding: 1px 9px; border-radius: 99px; font-size: 0.78rem; font-weight: 600; white-space: nowrap; }
   .pill.exit { background: var(--warn-soft); color: var(--warn); }
   .pill.stay { background: var(--stay-soft); color: var(--stay); }
   .pill.done { background: var(--accent-soft); color: var(--accent); }
-  table { width: 100%; border-collapse: collapse; font-size: 0.93rem; }
-  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { color: var(--muted); font-weight: 500; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
-  .scroll { overflow-x: auto; }
-  .notes { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-  .note h3 { margin: 0 0 6px; font-size: 1rem; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
-  .note ul { margin: 6px 0 10px; padding-left: 18px; }
-  .note .hash { font-family: var(--mono); font-size: 0.78rem; word-break: break-all; color: var(--muted); }
-  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; font-size: 0.82rem; }
-  .bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 0.88rem; color: var(--muted); margin: 18px 0 0; }
-  .bar button { font: inherit; background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
-  #error { display: none; margin-top: 16px; }
+  .pill.info { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+
+  /* hero checks */
+  .checks { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); margin-top: 24px; }
+  .check { display: flex; gap: 10px; align-items: flex-start; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; font-size: 0.9rem; }
+  .check .mark { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 0.75rem; font-weight: 700; background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+  .check.pass .mark { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+  .check.fail .mark { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .check.note .mark { background: var(--stay-soft); color: var(--stay); border-color: transparent; }
+  .check b { display: block; font-weight: 600; }
+  .check span { color: var(--muted); font-size: 0.84rem; }
+  .statusbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 14px; font-size: 0.86rem; color: var(--muted); }
+  #error { display: none; margin-top: 14px; }
   #error.show { display: block; }
-  .timeline td:first-child { white-space: nowrap; color: var(--muted); font-family: var(--mono); font-size: 0.82rem; }
-  footer { margin-top: 48px; color: var(--muted); font-size: 0.88rem; }
+
+  /* two outcomes */
+  .versus { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; margin-top: 18px; }
+  @media (max-width: 760px) { .versus { grid-template-columns: 1fr; } }
+  .side { border-radius: 12px; border: 1px solid var(--line); background: var(--panel); overflow: hidden; }
+  .side header { padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--panel-2); }
+  .side header .eyebrow { margin: 0 0 2px; }
+  .side ol { list-style: none; margin: 0; padding: 6px 18px 8px; }
+  .side li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px dashed var(--line); }
+  .side li:last-child { border-bottom: 0; }
+  .side .dot { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 0.72rem; font-weight: 700; background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); }
+  .side.bad-side .dot.hit { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .side.good-side .dot.hit { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+  .side li small { display: block; color: var(--muted); font-size: 0.82rem; }
+  .side footer { padding: 14px 18px; border-top: 1px solid var(--line); }
+  .big { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; }
+  .shares { display: flex; height: 30px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line); margin: 8px 0 4px; }
+  .shares div { display: grid; place-items: center; font-size: 0.72rem; font-weight: 600; color: var(--ink); border-right: 1px solid var(--bg); white-space: nowrap; overflow: hidden; }
+  .shares .paid { background: var(--warn-soft); color: var(--warn); }
+  .shares .left { background: var(--accent-soft); color: var(--accent); }
+  .shares .kept { background: var(--stay-soft); color: var(--stay); }
+
+  /* tables */
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  tr:last-child td { border-bottom: 0; }
+  .scroll { overflow-x: auto; }
+  .timeline td:first-child { white-space: nowrap; color: var(--muted); font-family: var(--mono); font-size: 0.8rem; }
+  .timeline tr { transition: opacity .35s, background .35s; }
+  .timeline tr.dim { opacity: 0.18; }
+  .timeline tr.flash { background: var(--accent-soft); }
+
+  /* how it works */
+  .steps { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); counter-reset: s; margin-top: 18px; }
+  .steps .panel { position: relative; padding-top: 44px; }
+  .steps .panel::before { counter-increment: s; content: counter(s); position: absolute; top: 14px; left: 18px; width: 22px; height: 22px; border-radius: 50%; background: var(--ink); color: var(--bg); font-size: 0.76rem; font-weight: 700; display: grid; place-items: center; }
+  .steps p { color: var(--muted); font-size: 0.92rem; margin: 0; }
+
+  /* notes */
+  .notes { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
+  .note h3 { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .note ul { margin: 6px 0 10px; padding-left: 18px; font-size: 0.92rem; }
+  .note .hash { font-family: var(--mono); font-size: 0.74rem; word-break: break-all; color: var(--muted); }
+
+  /* built on */
+  .logos { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-top: 18px; }
+  .logos .panel h3 { display: flex; align-items: center; gap: 8px; }
+  .logos .panel p { color: var(--muted); font-size: 0.88rem; margin: 0; }
+  figure { margin: 18px 0 0; }
+  figure img { width: 100%; max-width: 800px; border-radius: 10px; border: 1px solid var(--line); display: block; }
+  figcaption { font-size: 0.84rem; color: var(--muted); margin-top: 6px; }
+
+  /* code */
+  .cmd { position: relative; margin: 8px 0 14px; }
+  .cmd pre { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 84px 14px 14px; overflow-x: auto; font: 0.82rem/1.55 var(--mono); }
+  .cmd button { position: absolute; top: 8px; right: 8px; }
+
+  .nots { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); margin-top: 18px; }
+  .nots .panel p { color: var(--muted); font-size: 0.92rem; margin: 0; }
+  footer.end { margin: 64px 0 40px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.86rem; }
 </style>
 </head>
 <body>
-<main>
-  <h1>Dissent Finance</h1>
-  <p class="lede">A vault for a group's money that sits next to an unchanged Sputnik DAO on NEAR. When the DAO approves a spend, it waits for a fixed window, and anyone who did not vote for it can leave with their share first. Each member's agent does this for them, using a key that can only call <code>exit</code> and <code>cancel_spend</code>.</p>
-  <p class="lede">Everything below is read from NEAR mainnet by your browser as the page loads. The agents' notes come from the public repo and are hashed here, then matched against the hashes the exits carried on chain.</p>
-
-  <div class="bar">
-    <span id="status" class="pending">Reading mainnet…</span>
-    <button id="reload" type="button">Read again</button>
-    <span id="switch"></span>
-    <span>Source: <a href="https://github.com/QijomoFav35/Dissent-Finance">github.com/QijomoFav35/Dissent-Finance</a></span>
+<div class="banner">Built at NEAR HACKATHON for the Social Money track. Running on NEAR mainnet with real USDC, read live by your browser.</div>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Dissent Finance, top of page">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="1" y="1" width="18" height="18" rx="4" fill="currentColor"/><path d="M6 14 L14 6 M11 6 H14 V9" stroke="var(--bg)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Dissent Finance
+    </a>
+    <nav class="sections" aria-label="Sections">
+      <a href="#outcomes">Outcomes</a>
+      <a href="#how">How it works</a>
+      <a href="#run">Live run</a>
+      <a href="#track">Track</a>
+      <a href="#proof">Proof</a>
+      <a href="#verify">Verify</a>
+      <a href="#not">Limits</a>
+    </nav>
+    <div class="tools">
+      <span class="seg" id="switch" aria-label="Which vault"></span>
+      <button class="btn" id="theme" type="button" aria-label="Switch light or dark">Theme</button>
+      <a class="btn dark" href="https://github.com/QijomoFav35/Dissent-Finance">Source</a>
+    </div>
   </div>
-  <div id="error" class="panel bad"></div>
+</header>
 
-  <h2>The vault</h2>
-  <div class="grid">
-    <div class="panel stat"><div class="k">Account</div><div class="v mono"><a href="https://nearblocks.io/address/vault.dissentfinance.near">vault.dissentfinance.near</a></div></div>
-    <div class="panel stat"><div class="k">Access keys</div><div class="v" id="keys">…</div></div>
-    <div class="panel stat"><div class="k">Code</div><div class="v" id="code">…</div></div>
-    <div class="panel stat"><div class="k">Holds now</div><div class="v" id="holds">…</div></div>
-  </div>
+<main class="wrap" id="top">
+  <section style="padding-top:48px">
+    <p class="eyebrow">Sputnik DAO · NEAR mainnet · USDC</p>
+    <h1>If your group votes to spend money you didn't agree to, take your share out before it pays.</h1>
+    <p class="lede">Dissent Finance is a vault that sits next to a group's unchanged Sputnik DAO. A spend the DAO approves waits for a fixed window. Anyone who did not vote for it can leave with their exact share first, and if the vault can no longer pay, the spend is cancelled. Each member's agent watches for them, with a key that can call only <code>exit</code> and <code>cancel_spend</code>.</p>
+    <div class="checks" id="checks">
+      <div class="check"><div class="mark">…</div><div><b>Reading mainnet</b><span>Your browser is calling public NEAR RPC.</span></div></div>
+    </div>
+    <div class="statusbar">
+      <span id="status" class="pending">Reading mainnet…</span>
+      <button class="btn" id="reload" type="button">Read again</button>
+      <span id="vaultline"></span>
+    </div>
+    <div id="error" class="panel bad"></div>
+  </section>
 
-  <h2>Spend 0</h2>
-  <div class="panel" id="spend">…</div>
+  <section id="outcomes">
+    <p class="eyebrow">The same vote, two outcomes</p>
+    <h2 id="vs-title">Two of five members approve paying one of them most of the fund.</h2>
+    <p class="sub">"Without the vault" is what an unchanged DAO does with that vote. "With Dissent Finance" is what happened on mainnet with the vault in front of the same DAO. The right side is read from the chain; the left applies the same numbers to a DAO with no vault.</p>
+    <div class="versus">
+      <div class="side bad-side">
+        <header><p class="eyebrow">Without the vault</p><h3>The DAO pays, everyone shares the loss</h3></header>
+        <ol id="vs-left"><li><div class="dot">…</div><div class="pending">Reading…</div></li></ol>
+        <footer id="vs-left-foot"></footer>
+      </div>
+      <div class="side good-side">
+        <header><p class="eyebrow">With Dissent Finance, on mainnet</p><h3>Those who disagreed leave first</h3></header>
+        <ol id="vs-right"><li><div class="dot">…</div><div class="pending">Reading…</div></li></ol>
+        <footer id="vs-right-foot"></footer>
+      </div>
+    </div>
+  </section>
 
-  <h2>What happened, from the vault's own record</h2>
-  <div class="panel scroll"><table class="timeline"><thead><tr><th>Time (UTC)</th><th>Event</th><th>Detail</th></tr></thead><tbody id="timeline"><tr><td colspan="3" class="pending">…</td></tr></tbody></table></div>
+  <section id="how">
+    <p class="eyebrow">How it works</p>
+    <h2>The DAO keeps deciding. The vault only adds a way out.</h2>
+    <div class="steps">
+      <div class="panel"><h3>Join</h3><p>Members put USDC and a little NEAR into the vault and get shares. The DAO's policy and code are not touched.</p></div>
+      <div class="panel"><h3>Set your own exit rules</h3><p>Each member says when their agent should leave: one spend over a share of the fund, a receiver never paid before, or a blocked receiver.</p></div>
+      <div class="panel"><h3>DAO approves, vault waits</h3><p>An approved proposal calls <code>queue_spend</code>. The vault reads the proposal back from the DAO and holds it for the window.</p></div>
+      <div class="panel"><h3>Agents act</h3><p>Every agent writes a note, hashes it, and exits with the hash if a rule is broken. If the vault can no longer pay, an agent cancels the spend.</p></div>
+    </div>
+  </section>
 
-  <h2>The agents' notes</h2>
-  <p>Each agent wrote a note before acting: the rules it checked, the numbers, and its decision. An exit sends the note's SHA-256 as <code>reason_hash</code>. This page recomputes every hash from the published note.</p>
-  <div class="notes" id="notes"><div class="panel pending">…</div></div>
+  <section id="run">
+    <p class="eyebrow">The live run</p>
+    <h2>What happened, from the vault's own record</h2>
+    <p class="sub" id="spend">…</p>
+    <div class="grid" style="margin:14px 0">
+      <div class="panel"><div class="eyebrow">Vault</div><div class="mono" id="acct">…</div></div>
+      <div class="panel"><div class="eyebrow">Holds now</div><div id="holds">…</div></div>
+      <div class="panel"><div class="eyebrow">Code</div><div id="code">…</div></div>
+      <div class="panel"><div class="eyebrow">Access keys</div><div id="keys">…</div></div>
+    </div>
+    <div class="panel scroll">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px"><b>Timeline</b><button class="btn" id="replay" type="button">Replay the spend</button></div>
+      <table class="timeline"><thead><tr><th>Time (UTC)</th><th>Event</th><th>Detail</th></tr></thead><tbody id="timeline"><tr><td colspan="3" class="pending">…</td></tr></tbody></table>
+    </div>
 
-  <h2>Members now</h2>
-  <div class="panel scroll"><table><thead><tr><th>Member</th><th>In the vault</th><th>USDC in their wallet</th></tr></thead><tbody id="members"><tr><td colspan="3" class="pending">…</td></tr></tbody></table></div>
+    <h3 style="margin-top:28px">The agents' notes</h3>
+    <p class="sub">Each agent wrote a note before acting: the rules it checked, the numbers, and its decision. An exit carries the note's SHA-256 as <code>reason_hash</code>. This page fetches each note from the repo, hashes it in your browser, and compares it with the hash on chain.</p>
+    <div class="notes" id="notes"><div class="panel pending">…</div></div>
 
-  <h2>Check it without this page</h2>
-  <p>With <code>near</code> CLI. None of these need an account.</p>
-<pre id="cli">near contract verify deployed-at VAULT_ID network-config mainnet now
+    <h3 style="margin-top:28px">Members now</h3>
+    <div class="panel scroll"><table><thead><tr><th>Member</th><th>In the vault</th><th>USDC in their wallet</th></tr></thead><tbody id="members"><tr><td colspan="3" class="pending">…</td></tr></tbody></table></div>
+  </section>
+
+  <section id="track">
+    <p class="eyebrow">Social Money track</p>
+    <h2>"Leave the multisig alone and build what communities do with it."</h2>
+    <p class="sub">The track asks for shared budgets and collective ownership on top of Sputnik DAO and Trezu, leaning on named accounts. Each line links to something you can open now.</p>
+    <div class="panel scroll" style="margin-top:14px"><table>
+      <thead><tr><th>The track asks for</th><th>How Dissent Finance meets it</th><th>Proof</th></tr></thead>
+      <tbody>
+        <tr><td>Build on the existing Sputnik DAO, don't write a new multisig</td><td>The DAO is a stock one from the public <code>sputnik-dao.near</code> factory. The vault is a separate contract; it only accepts a spend after reading the DAO's own record of the approved proposal.</td><td><a href="https://nearblocks.io/address/dissentfinance.sputnik-dao.near">The DAO on mainnet</a></td></tr>
+        <tr><td>Trezu</td><td>Trezu lists the DAO like any other treasury. Both spends show there as executed <code>queue_spend</code> calls on the vaults, each with 2 approving votes (2 needed).</td><td><a href="https://trezu.app/dissentfinance.sputnik-dao.near/requests?tab=Approved">Open it in Trezu</a></td></tr>
+        <tr><td>Shared budgets, collective ownership</td><td>Members own the fund by shares, and nobody can be made to fund a spend they voted against: they can leave with their exact share while it waits.</td><td><a href="#members">Members now</a></td></tr>
+        <tr><td>Named accounts</td><td>Every member, agent key and exit is a named account (<code>alice.dissentfinance.near</code>…). The agents' keys are function-call keys on each member's own account.</td><td><a href="#notes">The notes and their hashes</a></td></tr>
+      </tbody>
+    </table></div>
+    <div class="logos">
+      <div class="panel"><h3>Sputnik DAO</h3><p>Unchanged v2 DAO, votes and approvals.</p></div>
+      <div class="panel"><h3>Trezu</h3><p>Views the same treasury and its requests.</p></div>
+      <div class="panel"><h3>Native USDC</h3><p>Circle's USDC on NEAR, joins and exits.</p></div>
+      <div class="panel"><h3>Function-call keys</h3><p>Agents can call two methods, nothing else.</p></div>
+      <div class="panel"><h3>Reproducible build</h3><p>NEP-330 metadata; <code>near contract verify</code> rebuilds it.</p></div>
+    </div>
+    <figure>
+      <a href="https://trezu.app/dissentfinance.sputnik-dao.near/requests?tab=Approved"><img src="images/trezu-requests.jpg" alt="Trezu's Requests page for dissentfinance.sputnik-dao.near: two executed Function Call requests, queue_spend on vault2 and on vault, each with 2 approving votes"></a>
+      <figcaption>Trezu, Requests, Executed: request #0 (v1) and #1 (v2), both <code>queue_spend</code>, filed by Ben and approved by Ben and Cara (2 votes, 2 needed). The link opens the same list.</figcaption>
+    </figure>
+  </section>
+
+  <section id="proof">
+    <p class="eyebrow">Proof, read from mainnet now</p>
+    <h2>The DAO, the keys and the agents on duty</h2>
+    <p class="sub">The same checks as <code>agent/mainnet/verify.mjs</code>, run by your browser against public RPC as this page loads.</p>
+    <div class="panel scroll" style="margin-top:14px"><table>
+      <thead><tr><th style="width:44px"></th><th>Check</th><th>What the chain says</th></tr></thead>
+      <tbody id="proofrows"><tr><td colspan="3" class="pending">Reading…</td></tr></tbody>
+    </table></div>
+    <h3 style="margin-top:24px">Agent keys</h3>
+    <p class="sub">Each member's agent holds a key on the member's own account. Here is what the chain allows each key to do.</p>
+    <div class="panel scroll"><table>
+      <thead><tr><th>Member</th><th>Receiver</th><th>Methods</th><th>Gas allowance left</th></tr></thead>
+      <tbody id="keyrows"><tr><td colspan="4" class="pending">Reading…</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <section id="verify">
+    <p class="eyebrow">Check it yourself</p>
+    <h2>Don't trust this page. Every claim on it can be checked from a terminal.</h2>
+    <p class="sub">One command with Node 20+ and nothing else installed: it fetches each exit transaction from mainnet, reads the exit event, hashes the published note, and prints PASS or FAIL.</p>
+    <div class="cmd"><pre id="cmd-verify">git clone https://github.com/QijomoFav35/Dissent-Finance && cd Dissent-Finance
+node agent/mainnet/verify.mjs VAULT_FLAG</pre><button class="btn copy" type="button" data-for="cmd-verify">Copy</button></div>
+    <p class="sub">With <code>near</code> CLI, no account needed:</p>
+    <div class="cmd"><pre id="cli">near contract verify deployed-at VAULT_ID network-config mainnet now
 near account view-account-summary VAULT_ID network-config mainnet now
 near contract call-function as-read-only VAULT_ID get_spend json-args '{"spend_id":0}' network-config mainnet now
-near contract call-function as-read-only VAULT_ID get_record json-args '{"from_index":0,"limit":100}' network-config mainnet now</pre>
+near contract call-function as-read-only VAULT_ID get_record json-args '{"from_index":0,"limit":100}' network-config mainnet now</pre><button class="btn copy" type="button" data-for="cli">Copy</button></div>
+    <p class="sub">The tests run from a clone too: 64 contract tests (two of them property tests) with <code>cargo test --lib</code>, sandbox tests against the real Sputnik DAO, 37 agent tests with <code>npm test</code>, 7 tests of this page in a headless browser, and a replay of real DAO spends with 30 rule profiles. Steps in the <a href="https://github.com/QijomoFav35/Dissent-Finance#run-it-yourself">README</a>.</p>
+  </section>
 
-  <footer>Data from NEAR mainnet RPC and raw.githubusercontent.com. No wallet, no tracking, no build step: view the source of this page to see every call it makes.</footer>
+  <section id="not">
+    <p class="eyebrow">What this is not</p>
+    <h2>Plain limits, stated up front</h2>
+    <div class="nots">
+      <div class="panel"><h3>Not a veto</h3><p>Dissenters can't stop a spend. They can leave before it pays. If enough leave that the vault can't pay, the spend is cancelled.</p></div>
+      <div class="panel"><h3>Not an AI that decides for you</h3><p>The agents apply rules each member wrote. The notes show every check and number they used.</p></div>
+      <div class="panel"><h3>Not audited</h3><p>Small real amounts on mainnet. The contract has not had an external audit.</p></div>
+      <div class="panel"><h3>Approvers wait</h3><p>Members who voted Approve can't exit until the spend settles, so they can't approve and run.</p></div>
+    </div>
+  </section>
+
+  <footer class="end">Data from NEAR mainnet RPC and raw.githubusercontent.com. No wallet, no tracking, no build step: view the source of this page to see every call it makes. <a href="https://github.com/QijomoFav35/Dissent-Finance">github.com/QijomoFav35/Dissent-Finance</a></footer>
 </main>
 
 <script>
 // Two vaults run on mainnet. v1 ran the first live story and is keyless, with limits fixed in v2.
 const VAULTS = {
-  vault: { id: "vault.dissentfinance.near", label: "v1", code: "3jWHECjP5BCezXDBPR1XuQzb62KpBYaKZzhMXbmoHtWN", notes: "notes" },
-  vault2: { id: "vault2.dissentfinance.near", label: "v2", code: "5Pk3qkYpH61QQpzSVsHyBFqW1XhCYrQQvYirS7npeMuK", notes: "notes/vault2" },
+  vault: { id: "vault.dissentfinance.near", label: "v1", code: "3jWHECjP5BCezXDBPR1XuQzb62KpBYaKZzhMXbmoHtWN", notes: "notes", flag: "--vault vault" },
+  vault2: { id: "vault2.dissentfinance.near", label: "v2", code: "AJBeJNNHfRTP2SXV1q7yzsYVTxHaaV8roipVjJN2G3Zx", notes: "notes/vault2", flag: "" },
 };
 const PICK = new URLSearchParams(location.search).get("v") in VAULTS ? new URLSearchParams(location.search).get("v") : "vault2";
 const VAULT = VAULTS[PICK].id;
@@ -121,10 +326,12 @@ const RPCS = ["https://free.rpc.fastnear.com", "https://rpc.mainnet.near.org", "
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const short = (a) => esc(String(a).replace(".dissentfinance.near", ""));
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const usdc = (u) => (Number(BigInt(u)) / 1e6).toFixed(2);
 const near = (y) => (Number(BigInt(y) / 10n ** 20n) / 1e4).toFixed(2);
 const tx = (h) => `<a class="mono" href="https://nearblocks.io/txns/${esc(h)}">${esc(h.slice(0, 8))}</a>`;
 const when = (ns) => new Date(Number(BigInt(ns) / 1_000_000n)).toISOString().replace("T", " ").slice(0, 19);
+const secs = (a, b) => Number((BigInt(b) - BigInt(a)) / 1_000_000n) / 1000;
 
 async function rpc(method, params) {
   let last;
@@ -165,6 +372,8 @@ function describeRule(c) {
   return esc(JSON.stringify(c));
 }
 
+const check = (state, title, detail) => `<div class="check ${state}"><div class="mark">${state === "pass" ? "✓" : state === "fail" ? "!" : "i"}</div><div><b>${title}</b><span>${detail}</span></div></div>`;
+
 async function load() {
   $("status").className = "pending";
   $("status").textContent = "Reading mainnet…";
@@ -194,54 +403,85 @@ async function load() {
         txFor["exit:alice.dissentfinance.near"] = e.alice_exit;
         txFor.cancel = e.cara_cancel;
       }
-      if (e.step === "deploy_vault") txFor.deploy = e.tx;
       if (e.step === "exit") txFor[`exit:${e.account}`] = e.tx;
       if (e.step === "cancel") txFor.cancel = e.tx;
     }
 
     // ---------- the vault ----------
     const nKeys = keys.keys.length;
+    $("acct").innerHTML = `<a href="https://nearblocks.io/address/${VAULT}">${VAULT}</a>`;
     $("keys").innerHTML = nKeys === 0
       ? `<span class="ok">None.</span> Nobody can change the code or move funds outside its rules.`
-      : `<span class="bad">${nKeys} key(s) still on the account.</span> Until they are deleted, whoever holds them can change the code.`;
+      : `<span class="bad">${nKeys} access key(s).</span> Kept while v2 is still being checked; whoever holds it can redeploy. v1 is keyless.`;
     const codeOk = VERIFIED_CODE !== null && account.code_hash === VERIFIED_CODE;
     const meta = await view(VAULT, "contract_source_metadata").catch(() => null);
-    const link = meta?.link ? `<a href="${esc(meta.link)}">${esc(meta.link.split("/tree/")[1]?.slice(0, 7) ?? "source")}</a>` : "no source link";
-    $("code").innerHTML = `${codeOk ? '<span class="ok">Code hash is the one this page expects</span>' : '<span class="bad">Code hash is not the one this page expects</span>'}<div class="mono">${esc(account.code_hash)}</div><div style="font-size:.85rem">The contract names its source as commit ${link}. This page can't rebuild it; <code>near contract verify</code> below does.</div>`;
-    $("holds").innerHTML = `${usdc(balances.usdc)} USDC and ${near(balances.near)} NEAR<div style="font-size:.85rem;color:var(--muted)">for ${balances.members} members, ${balances.open_spends} spend(s) open</div>`;
+    const commit = meta?.link?.split("/tree/")[1]?.slice(0, 7);
+    const link = meta?.link?.startsWith("https://github.com/") ? `<a href="${esc(meta.link)}">${esc(commit ?? "source")}</a>` : "no source link";
+    $("code").innerHTML = `${codeOk ? '<span class="ok">Expected code hash</span>' : '<span class="bad">Unexpected code hash</span>'}<div class="mono" style="word-break:break-all;font-size:.76rem">${esc(account.code_hash)}</div><div style="font-size:.84rem;color:var(--muted)">Source: commit ${link}</div>`;
+    $("holds").innerHTML = `${usdc(balances.usdc)} USDC, ${near(balances.near)} NEAR<div style="font-size:.84rem;color:var(--muted)">${Number(balances.members)} members, ${Number(balances.open_spends)} spend(s) open</div>`;
 
     // ---------- spend 0 and the DAO's own record of the vote ----------
-    let fundAtQueue = 0n;
+    let fundAtQueue = 0n, queuedAt = null;
     for (const ev of record) {
-      if (ev.event === "queue_spend" && ev.data?.[0]?.spend_id === 0) break;
+      if (ev.event === "queue_spend" && ev.data?.[0]?.spend_id === 0) { queuedAt = ev.ts; break; }
       if (ev.event === "join") fundAtQueue += BigInt(ev.data[0].usdc);
     }
-    if (!spend) $("spend").innerHTML = `<p>No spend has been queued in this vault yet.</p>`;
     const votes = proposal.votes || {};
     const approvers = Object.keys(votes).filter((a) => votes[a] === "Approve");
     const silent = MEMBERS.filter((m) => !(m in votes));
-    if (spend) $("spend").innerHTML = `
-      <p><strong>${usdc(spend.amount)} USDC to ${short(spend.recipient)}</strong>, ${fundAtQueue ? `${Math.round(Number((BigInt(spend.amount) * 1000n) / fundAtQueue) / 10)}% of the ${usdc(fundAtQueue)} USDC the vault held when it was queued` : ""}.
-      Status: <span class="pill ${spend.status === "Cancelled" ? "done" : "stay"}">${esc(spend.status)}</span></p>
-      <p>Approved in the DAO by ${approvers.map(short).join(" and ")} (DAO proposal ${spend.proposal_id} is ${esc(proposal.status)}${txFor.propose ? `, filed in ${tx(txFor.propose)}` : ""}). ${silent.map(short).join(", ")} did not vote.</p>
-      <p style="color:var(--muted);margin:0">The vault read this proposal back from <span class="mono">${DAO}</span> and queued it only because the DAO's record matched the call byte for byte. Its window would have closed at ${when(spend.window_ends)} UTC.</p>`;
+    const cancel = record.find((ev) => ev.event === "cancel_spend" && ev.data?.[0]?.spend_id === 0);
+    // Only exits between the queue and the spend settling belong to this spend; later exits are members leaving afterwards.
+    const settledAt = cancel ? BigInt(cancel.ts) : spend ? BigInt(spend.window_ends) : 0n;
+    const exits = record.filter((ev) => ev.event === "exit" && queuedAt && BigInt(ev.ts) >= BigInt(queuedAt) && BigInt(ev.ts) <= settledAt);
+    const pct = spend && fundAtQueue ? Math.round(Number((BigInt(spend.amount) * 1000n) / fundAtQueue) / 10) : 0;
+
+    if (!spend) $("spend").innerHTML = `No spend has been queued in this vault yet.`;
+    else $("spend").innerHTML = `<b style="color:var(--ink)">${usdc(spend.amount)} USDC to ${short(spend.recipient)}</b>, ${pct}% of the ${usdc(fundAtQueue)} USDC the vault held. Approved in the DAO by ${approvers.map(short).join(" and ")} (proposal ${spend.proposal_id}, ${esc(proposal.status)}${txFor.propose ? `, filed in ${tx(txFor.propose)}` : ""}); ${silent.map(short).join(", ")} did not vote. Status now: <span class="pill ${spend.status === "Cancelled" ? "done" : "stay"}">${esc(spend.status)}</span>. The vault queued it only because the DAO's record matched the call byte for byte.`;
+
+    // ---------- two outcomes ----------
+    if (spend) {
+      const n = MEMBERS.length;
+      const each = fundAtQueue / BigInt(n);
+      const leftover = fundAtQueue - BigInt(spend.amount);
+      const leaverNames = exits.map((e) => cap(short(e.data[0].account_id)));
+      $("vs-title").textContent = `${approvers.length} of ${n} members approve paying ${cap(short(spend.recipient))} ${pct}% of the fund.`;
+      $("vs-left").innerHTML = [
+        ["1", `Proposal ${spend.proposal_id} passes ${approvers.length} of ${n}`, `${approvers.map((a) => cap(short(a))).join(" and ")} approve; ${silent.length} did not vote.`],
+        ["2", `The DAO pays ${usdc(spend.amount)} USDC to ${cap(short(spend.recipient))}`, "No one else gets a say once the vote is in."],
+        ["3", `${usdc(leftover)} USDC left for all ${n}`, `Each member who did not approve now owns ${usdc(leftover / BigInt(n))} instead of ${usdc(each)}.`],
+      ].map(([d, t, s], i) => `<li><div class="dot ${i ? "hit" : ""}">${d}</div><div>${t}<small>${s}</small></div></li>`).join("");
+      $("vs-left-foot").innerHTML = `<div class="big bad">${usdc(spend.amount)} USDC paid out</div><div class="shares"><div class="paid" style="flex:${pct}">to ${short(spend.recipient)}</div><div class="kept" style="flex:${100 - pct}">left for ${n}</div></div><small class="pending">A counterfactual: the same vote with no vault in front of the DAO.</small>`;
+      const steps = [["1", `Spend queued at ${queuedAt ? when(queuedAt).slice(11) : "?"} UTC`, `The vault read proposal ${spend.proposal_id} back from the DAO and started its window.`]];
+      exits.forEach((e) => {
+        const d = e.data[0];
+        steps.push([String(steps.length + 1), `${cap(short(d.account_id))}'s agent exits, ${queuedAt ? `+${secs(queuedAt, e.ts)} s` : ""}`, `Took ${usdc(d.usdc)} USDC, the exact share, with note hash ${esc((d.reason_hash || "").slice(0, 10))}…`]);
+      });
+      if (cancel) steps.push([String(steps.length + 1), `Spend cancelled, ${queuedAt ? `+${secs(queuedAt, cancel.ts)} s` : ""}`, `${cap(short(cancel.data[0].by))}'s agent saw the vault could no longer pay it.`]);
+      $("vs-right").innerHTML = steps.map(([d, t, s], i) => `<li><div class="dot ${i ? "hit" : ""}">${d}</div><div>${t}<small>${s}</small></div></li>`).join("");
+      const leftUsdc = exits.reduce((a, e) => a + BigInt(e.data[0].usdc), 0n);
+      const leftPct = fundAtQueue ? Number((leftUsdc * 100n) / fundAtQueue) : 0;
+      $("vs-right-foot").innerHTML = `<div class="big ${spend.status === "Cancelled" ? "ok" : ""}">${spend.status === "Cancelled" ? "0 USDC paid out" : `Spend ${esc(spend.status.toLowerCase())}`}</div><div class="shares"><div class="left" style="flex:${leftPct}">${leaverNames.join(", ")} left</div><div class="kept" style="flex:${100 - leftPct}">kept by those who stayed</div></div><small class="pending">${cancel && queuedAt ? `From queue to cancel: ${secs(queuedAt, cancel.ts)} seconds, nobody touching anything.` : ""}</small>`;
+    } else {
+      $("vs-left").innerHTML = $("vs-right").innerHTML = `<li><div class="dot">–</div><div class="pending">No spend in this vault yet.</div></li>`;
+    }
 
     // ---------- timeline from the vault's record ----------
     const rows = [];
     for (const ev of record) {
       const d = ev.data?.[0] ?? {};
       const at = when(ev.ts);
-      if (ev.event === "pending_deposit") rows.push([at, "deposit", `${short(d.account_id)} sent ${usdc(d.usdc)} USDC to join`]);
-      else if (ev.event === "join") rows.push([at, "join", `${short(d.account_id)} put in ${near(d.near)} NEAR and ${usdc(d.usdc)} USDC${txFor[`join:${d.account_id}`] ? ` ${tx(txFor[`join:${d.account_id}`])}` : ""}`]);
-      else if (ev.event === "set_rules") rows.push([at, "rules", `${short(d.account_id)} set exit rules`]);
-      else if (ev.event === "queue_spend") rows.push([at, "<strong>spend queued</strong>", `${usdc(d.amount)} USDC to ${short(d.recipient)}, ${d.approve} approved, ${d.not_approve} voted against${txFor["vote:cara.dissentfinance.near"] ? `. Approving vote: ${tx(txFor["vote:cara.dissentfinance.near"])}` : ""}`]);
-      else if (ev.event === "exit") rows.push([at, '<span class="pill exit">exit</span>', `${short(d.account_id)} left with ${usdc(d.usdc)} USDC and ${near(d.near)} NEAR, note hash <span class="mono">${esc((d.reason_hash || "").slice(0, 12))}…</span>${txFor[`exit:${d.account_id}`] ? ` ${tx(txFor[`exit:${d.account_id}`])}` : ""}`]);
-      else if (ev.event === "cancel_spend") rows.push([at, '<span class="pill done">cancelled</span>', `spend ${d.spend_id} cancelled by ${short(d.by)}'s agent: the vault could no longer pay it${txFor.cancel ? ` ${tx(txFor.cancel)}` : ""}`]);
-      else rows.push([at, esc(ev.event), `<span class="mono">${esc(JSON.stringify(d)).slice(0, 160)}</span>`]);
+      const live = (ev.event === "queue_spend" || ev.event === "exit" || ev.event === "cancel_spend") && queuedAt && BigInt(ev.ts) >= BigInt(queuedAt) && BigInt(ev.ts) <= settledAt;
+      if (ev.event === "pending_deposit") rows.push([at, "deposit", `${short(d.account_id)} sent ${usdc(d.usdc)} USDC to join`, live]);
+      else if (ev.event === "join") rows.push([at, "join", `${short(d.account_id)} put in ${near(d.near)} NEAR and ${usdc(d.usdc)} USDC${txFor[`join:${d.account_id}`] ? ` ${tx(txFor[`join:${d.account_id}`])}` : ""}`, live]);
+      else if (ev.event === "set_rules") rows.push([at, "rules", `${short(d.account_id)} set exit rules`, live]);
+      else if (ev.event === "queue_spend") rows.push([at, "<strong>spend queued</strong>", `${usdc(d.amount)} USDC to ${short(d.recipient)}, ${Number(d.approve)} approved, ${Number(d.not_approve)} did not${txFor["vote:cara.dissentfinance.near"] ? `. Approving vote: ${tx(txFor["vote:cara.dissentfinance.near"])}` : ""}`, live]);
+      else if (ev.event === "exit") rows.push([at, '<span class="pill exit">exit</span>', `${short(d.account_id)} left with ${usdc(d.usdc)} USDC and ${near(d.near)} NEAR, note hash <span class="mono">${esc((d.reason_hash || "").slice(0, 12))}…</span>${txFor[`exit:${d.account_id}`] ? ` ${tx(txFor[`exit:${d.account_id}`])}` : ""}`, live]);
+      else if (ev.event === "cancel_spend") rows.push([at, '<span class="pill done">cancelled</span>', `spend ${d.spend_id} cancelled by ${short(d.by)}'s agent: the vault could no longer pay it${txFor.cancel ? ` ${tx(txFor.cancel)}` : ""}`, live]);
+      else rows.push([at, esc(ev.event), `<span class="mono">${esc(JSON.stringify(d)).slice(0, 160)}</span>`, live]);
     }
-    $("timeline").innerHTML = rows.map(([a, b, c]) => `<tr><td>${a}</td><td>${b}</td><td>${c}</td></tr>`).join("") || '<tr><td colspan="3">No events.</td></tr>';
+    $("timeline").innerHTML = rows.map(([a, b, c, live]) => `<tr${live ? ' data-live="1"' : ""}><td>${a}</td><td>${b}</td><td>${c}</td></tr>`).join("") || '<tr><td colspan="3">No events.</td></tr>';
     const exitHash = {};
-    for (const ev of record) if (ev.event === "exit") exitHash[ev.data[0].account_id] = ev.data[0].reason_hash;
+    for (const ev of exits) exitHash[ev.data[0].account_id] = ev.data[0].reason_hash;
 
     // ---------- notes, hashed here ----------
     const notes = await Promise.all(MEMBERS.map(async (m) => {
@@ -252,7 +492,7 @@ async function load() {
         return { m, published, computed: await sha256(canonical(published.note)) };
       } catch { return { m, missing: true }; }
     }));
-    let allMatch = true;
+    let allMatch = true, matched = 0;
     $("notes").innerHTML = notes.map(({ m, published, computed, missing }) => {
       if (missing) { allMatch = false; return `<div class="panel note"><h3>${short(m)}</h3><p class="bad">Note not found in the repo.</p></div>`; }
       const n = published.note;
@@ -260,16 +500,16 @@ async function load() {
       let match;
       if (n.decision === "exit") {
         const ok = onChain === computed;
-        if (!ok) allMatch = false;
-        match = ok ? `<span class="ok">Matches the hash on its exit.</span>` : `<span class="bad">Does not match the hash on chain (${esc(onChain || "no exit found")}).</span>`;
+        if (ok) matched++; else allMatch = false;
+        match = ok ? `<span class="ok">✓ Matches the hash its exit carried on chain.</span>` : `<span class="bad">Does not match the hash on chain (${esc(onChain || "no exit found")}).</span>`;
       } else {
-        match = `<span style="color:var(--muted)">Stayed, so no exit carries this hash.</span>`;
+        match = `<span class="pending">Stayed, so no exit carries this hash.</span>`;
       }
       const checks = (n.checks || []).map((c) => `<li>${describeRule(c)} ${c.broken ? '<span class="bad">Broken.</span>' : ""}</li>`).join("");
       return `<div class="panel note">
-        <h3>${short(m)} <span class="pill ${n.decision === "exit" ? "exit" : "stay"}">${esc(n.decision)}</span></h3>
+        <h3>${cap(short(m))} <span class="pill ${n.decision === "exit" ? "exit" : "stay"}">${esc(n.decision)}</span></h3>
         <ul>${checks || "<li>No rules set.</li>"}</ul>
-        <div class="hash">sha256 computed here: ${computed}</div>
+        <div class="hash">sha256, computed in your browser: ${computed}</div>
         <div style="font-size:.88rem;margin-top:6px">${match}</div>
       </div>`;
     }).join("");
@@ -278,14 +518,23 @@ async function load() {
     const mrows = await Promise.all(MEMBERS.map(async (m) => {
       const [sh, held] = await Promise.all([view(VAULT, "get_shares", { account_id: m }), view(USDC, "ft_balance_of", { account_id: m })]);
       const left = sh === "0";
-      const pct = left || BigInt(balances.total_shares) === 0n ? 0 : Number((BigInt(sh) * 1000n) / BigInt(balances.total_shares)) / 10;
-      return `<tr><td>${short(m)}</td><td>${left ? '<span class="pill exit">left</span>' : `${pct}% of the vault <span class="pill stay">stayed</span>`}</td><td>${usdc(held)}</td></tr>`;
+      const p = left || BigInt(balances.total_shares) === 0n ? 0 : Number((BigInt(sh) * 1000n) / BigInt(balances.total_shares)) / 10;
+      return `<tr><td>${cap(short(m))}</td><td>${left ? '<span class="pill exit">left</span>' : `${p}% of the vault <span class="pill stay">stayed</span>`}</td><td>${usdc(held)}</td></tr>`;
     }));
     $("members").innerHTML = mrows.join("");
 
-    const good = codeOk && allMatch;
+    // ---------- the checks strip ----------
+    const nExitNotes = notes.filter((x) => x.published?.note?.decision === "exit").length;
+    $("checks").innerHTML = [
+      check(codeOk ? "pass" : "fail", codeOk ? "Code is the reproducible build" : "Code hash differs", `${esc(account.code_hash.slice(0, 10))}… ${commit ? `from commit ${esc(commit)}` : ""}`),
+      check(allMatch && nExitNotes ? "pass" : "fail", `${matched} of ${nExitNotes} exit notes match the chain`, "Hashed here, compared with each exit's reason_hash."),
+      check(spend?.status === "Cancelled" ? "pass" : spend ? "note" : "note", spend ? `Spend ${esc(spend.status.toLowerCase())}` : "No spend yet", spend ? `${usdc(spend.amount)} USDC to ${short(spend.recipient)} was ${spend.status === "Cancelled" ? "never paid" : esc(spend.status.toLowerCase())}.` : "Nothing queued."),
+      check(nKeys === 0 ? "pass" : "note", nKeys === 0 ? "No access keys" : `${nKeys} key kept on ${VAULTS[PICK].label} for now`, nKeys === 0 ? "Nobody can change it." : "Held until checks finish. v1 is keyless."),
+    ].join("");
+
+    const good = codeOk && allMatch && (!spend || nExitNotes > 0);
     $("status").className = good ? "ok" : "bad";
-    $("status").textContent = `${good ? "Checked: code hash and every note hash match" : "Check failed"}${nKeys ? `, ${nKeys} key(s) still on the vault` : ", vault has no keys"}. Read from mainnet at ${new Date().toISOString().slice(11, 19)} UTC`;
+    $("status").textContent = `${good ? "All checks pass" : "A check failed"}. Read from mainnet at ${new Date().toISOString().slice(11, 19)} UTC.`;
   } catch (e) {
     $("status").className = "bad";
     $("status").textContent = "Could not read mainnet";
@@ -293,12 +542,105 @@ async function load() {
     $("error").textContent = `Every RPC endpoint failed: ${e?.message ?? e}. Try "Read again" in a minute.`;
   }
 }
-$("switch").innerHTML = Object.entries(VAULTS).map(([k, v]) => k === PICK ? `<strong>${v.label}</strong>` : `<a href="?v=${k}">${v.label}</a>`).join(" · ");
-document.querySelector('a[href="https://nearblocks.io/address/vault.dissentfinance.near"]')?.setAttribute("href", `https://nearblocks.io/address/${VAULT}`);
-document.querySelectorAll(".v.mono a").forEach((a) => { if (a.textContent === "vault.dissentfinance.near") a.textContent = VAULT; });
+
+// Replays the spend's rows (queue, exits, cancel) one by one, in order.
+$("replay").addEventListener("click", async () => {
+  const live = [...document.querySelectorAll("#timeline tr[data-live]")];
+  if (!live.length) return;
+  live.forEach((r) => r.classList.add("dim"));
+  live[0].scrollIntoView({ block: "center", behavior: "smooth" });
+  for (const r of live) {
+    await new Promise((res) => setTimeout(res, 700));
+    r.classList.remove("dim"); r.classList.add("flash");
+    setTimeout(() => r.classList.remove("flash"), 900);
+  }
+});
+document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($(b.dataset.for).textContent); b.textContent = "Copied"; } catch { b.textContent = "Select it"; }
+  setTimeout(() => (b.textContent = "Copy"), 1500);
+}));
+$("theme").addEventListener("click", () => {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("theme", document.documentElement.dataset.theme); } catch {}
+});
+try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+const navLinks = [...document.querySelectorAll("nav.sections a")];
+const spy = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) navLinks.forEach((a) => a.classList.toggle("on", a.getAttribute("href") === `#${e.target.id}`)); }), { rootMargin: "-40% 0px -55% 0px" });
+document.querySelectorAll("section[id]").forEach((s) => spy.observe(s));
+
+$("switch").innerHTML = Object.entries(VAULTS).map(([k, v]) => `<a href="?v=${k}" class="${k === PICK ? "on" : ""}">${v.label}</a>`).join("");
+$("vaultline").innerHTML = `Showing <span class="mono">${VAULT}</span>${PICK === "vault" ? " (the first run, keyless)" : ""}.`;
 $("cli").textContent = $("cli").textContent.replaceAll("VAULT_ID", VAULT);
-$("reload").addEventListener("click", load);
+$("cmd-verify").textContent = $("cmd-verify").textContent.replace(" VAULT_FLAG", VAULTS[PICK].flag ? ` ${VAULTS[PICK].flag}` : "");
+// ---------- proof: the DAO, the agent keys and the guard on duty ----------
+const FACTORY = "sputnik-dao.near";
+const REPO_API = "https://api.github.com/repos/QijomoFav35/Dissent-Finance/actions/workflows";
+const mark = (st) => `<span class="pill ${st === "PASS" ? "done" : st === "FAIL" ? "exit" : "info"}">${st}</span>`;
+async function proof() {
+  const rows = [];
+  const add = (st, what, detail) => rows.push(`<tr><td>${mark(st)}</td><td>${what}</td><td>${detail}</td></tr>`);
+  const tryAdd = async (what, fn) => { try { const [st, d] = await fn(); add(st, what, d); } catch (e) { add("FAIL", what, `could not read: ${esc(String(e?.message ?? e).slice(0, 100))}`); } };
+  let daoCode = null;
+  await tryAdd("The DAO runs unmodified Sputnik code", async () => {
+    const a = await query({ request_type: "view_account", account_id: DAO });
+    daoCode = a.global_contract_hash || a.code_hash;
+    const def = await view(FACTORY, "get_default_code_hash");
+    const ver = await view(FACTORY, "get_default_version").catch(() => null);
+    return [daoCode === def ? "PASS" : "FAIL", `<span class="mono">${esc(DAO)}</span> runs <span class="mono">${esc(String(daoCode).slice(0, 10))}…</span>, the code <span class="mono">${FACTORY}</span> publishes as its default${Array.isArray(ver) ? ` (Sputnik ${ver.map(Number).join(".")})` : ""}. <code>verify.mjs</code> also checks that the sandbox tests deploy these same bytes.`];
+  });
+  await tryAdd("The DAO's policy", async () => {
+    const p = await view(DAO, "get_policy");
+    const council = (p.roles || []).find((x) => x.name === "council");
+    const group = council?.kind?.Group || [];
+    const ok = group.length === MEMBERS.length && MEMBERS.every((m) => group.includes(m)) && (p.roles || []).every((x) => x.kind !== "Everyone") && String(p.default_vote_policy?.threshold) === "2";
+    return [ok ? "PASS" : "FAIL", `One council of ${group.length} named members (${group.map((m) => cap(short(m))).join(", ")}), no Everyone role, ${esc(String(p.default_vote_policy?.threshold))} votes pass a proposal.`];
+  });
+  const keyRows = [];
+  await tryAdd("Every agent key is limited to exit and cancel_spend", async () => {
+    let good = 0;
+    for (const m of MEMBERS) {
+      const list = await query({ request_type: "view_access_key_list", account_id: m });
+      const fc = (list.keys || []).map((k) => k.access_key?.permission?.FunctionCall).filter((x) => x && x.receiver_id === VAULT);
+      for (const k of fc) keyRows.push(`<tr><td>${cap(short(m))}</td><td class="mono">${esc(k.receiver_id)}</td><td class="mono">${k.method_names.map(esc).join(", ")}</td><td>${k.allowance ? `${near(k.allowance)} NEAR` : "no limit"}</td></tr>`);
+      if (fc.length && fc.every((k) => [...k.method_names].sort().join(",") === "cancel_spend,exit")) good++;
+    }
+    return [good === MEMBERS.length ? "PASS" : "FAIL", `${good} of ${MEMBERS.length} members' agent keys can call only <code>exit</code> and <code>cancel_spend</code> on <span class="mono">${esc(VAULT)}</span>, with no deposit. The vault pays an exit only to the member's own account.`];
+  });
+  $("keyrows").innerHTML = keyRows.join("") || '<tr><td colspan="4">No agent keys found for this vault.</td></tr>';
+  await tryAdd("The books balance", async () => {
+    const l = await view(VAULT, "get_ledger", { token: "Usdc" });
+    const held = BigInt(l.balance) + BigInt(l.pending_joins);
+    const acc = BigInt(l.deposited) - BigInt(l.spent) - BigInt(l.fees) - BigInt(l.exited) - BigInt(l.refunded);
+    const onToken = BigInt(await view(USDC, "ft_balance_of", { account_id: VAULT }));
+    const ok = held === acc && onToken >= held + BigInt(l.claimable);
+    return [ok ? "PASS" : "FAIL", `USDC: ${usdc(l.deposited)} in, ${usdc(l.exited)} out to leavers, ${usdc(l.spent)} spent, ${usdc(l.balance)} held. The USDC contract itself says the vault holds ${usdc(onToken)}.`];
+  });
+  if (PICK === "vault2") {
+    await tryAdd("Agents on duty", async () => {
+      let j;
+      try {
+        // The run watching now, if any; otherwise the newest (a queued run is the next shift).
+        let r = await fetch(`${REPO_API}/guard.yml/runs?status=in_progress&per_page=1`);
+        if (r.ok) { j = await r.json(); if (!j.workflow_runs?.length) { r = await fetch(`${REPO_API}/guard.yml/runs?per_page=1`); if (r.ok) j = await r.json(); } }
+        if (!r.ok) return ["INFO", `GitHub's API did not answer (${r.status}${r.status === 403 ? ", rate limit" : ""}); <a href="https://github.com/QijomoFav35/Dissent-Finance/actions/workflows/guard.yml">see the guard runs</a>.`];
+      } catch {
+        return ["INFO", `GitHub's API could not be reached; <a href="https://github.com/QijomoFav35/Dissent-Finance/actions/workflows/guard.yml">see the guard runs</a>.`];
+      }
+      const run = j.workflow_runs?.[0];
+      if (!run) return ["INFO", "The guard workflow has not run yet."];
+      const started = new Date(run.run_started_at || run.created_at);
+      const mins = Math.round((Date.now() - started) / 60000);
+      const live = run.status === "in_progress";
+      return [live ? "PASS" : "INFO", `${live ? "A guard run is in progress" : `Last guard run: ${esc(run.conclusion || run.status)}`}: <a href="${esc(run.html_url)}">run #${Number(run.run_number)}</a>, started ${mins} min ago. Each run keeps Ben's and Cara's agents watching the vault for about six hours with their limited keys; its log shows every check.`];
+    });
+  }
+  $("proofrows").innerHTML = rows.join("");
+}
+
+$("reload").addEventListener("click", () => { load(); proof(); });
 load();
+proof();
 </script>
 </body>
 </html>

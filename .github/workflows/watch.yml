@@ -1,0 +1,40 @@
+# Re-checks both vaults on NEAR mainnet every hour with agent/mainnet/verify.mjs: code hashes, keys,
+# the DAO's code and policy, every agent key's permissions, the spend, every exit against its note,
+# and the books. Read-only: it holds no key, reads no secret and sends no transaction. A failed check
+# fails the run, so the badge in the README shows whether mainnet still matches what the repo says.
+name: Mainnet checks
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# bash -o pipefail, so a failed check fails its step even through tee.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  verify:
+    name: verify.mjs on mainnet
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: v2 (vault2.dissentfinance.near)
+        run: node agent/mainnet/verify.mjs | tee v2.txt
+      - name: v1 (vault.dissentfinance.near)
+        if: always()
+        run: node agent/mainnet/verify.mjs --vault vault | tee v1.txt
+      - name: Summary
+        if: always()
+        run: |
+          { echo '### v2'; echo '```'; cat v2.txt; echo '```'; echo '### v1'; echo '```'; cat v1.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
