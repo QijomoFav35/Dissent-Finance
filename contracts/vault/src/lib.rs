@@ -19,6 +19,8 @@ pub const ERR_STORAGE: &str = "ERR_STORAGE";
 pub const ERR_MEMO_TOO_LONG: &str = "ERR_MEMO_TOO_LONG";
 pub const ERR_TOO_MANY_OPEN: &str = "ERR_TOO_MANY_OPEN";
 pub const ERR_DEPOSIT_TOO_SMALL: &str = "ERR_DEPOSIT_TOO_SMALL";
+pub const ERR_REASON_TOO_LONG: &str = "ERR_REASON_TOO_LONG";
+pub const ERR_JOIN_OVERFLOW: &str = "ERR_JOIN_OVERFLOW";
 pub const ERR_PROPOSAL_MISMATCH: &str = "ERR_PROPOSAL_MISMATCH";
 pub const ERR_WINDOW_OPEN: &str = "ERR_WINDOW_OPEN";
 pub const ERR_WINDOW_NOT_CLOSED: &str = "ERR_WINDOW_NOT_CLOSED";
@@ -45,6 +47,9 @@ pub const FEE_BPS: u128 = 10;
 pub const MIN_JOIN_USDC: u128 = 100_000;
 /// Longest memo a spend may carry, in bytes.
 pub const MAX_MEMO: usize = 256;
+/// Longest reason an exit may carry: a hex SHA-256 is 64 characters. Anything longer would let one
+/// exit store kilobytes in the record at the vault's expense.
+pub const MAX_REASON: usize = 64;
 /// Most spends that may be open at once, so agents can always read them and exits stay cheap.
 pub const MAX_OPEN_SPENDS: usize = 8;
 /// Storage the vault keeps free for the events that must always succeed: exits, cancels,
@@ -462,6 +467,7 @@ impl Vault {
         let account = env::predecessor_account_id();
         let owned = self.shares.get(&account).copied().unwrap_or(0);
         require!(owned > 0, ERR_NO_SHARES);
+        require!(reason_hash.as_ref().map(|r| r.len() <= MAX_REASON).unwrap_or(true), ERR_REASON_TOO_LONG);
         require!(!self.approves_open_spend(&account), ERR_APPROVED_SPEND_PENDING);
 
         let near_out = pro_rata(self.near_balance, owned, self.total_shares);
@@ -857,6 +863,17 @@ fn mul_div_floor(a: u128, b: u128, c: u128) -> u128 {
     q.try_into().expect("ERR_OVERFLOW")
 }
 
+fn try_mul_div_floor(a: u128, b: u128, c: u128) -> Option<u128> {
+    (U256::from(a) * U256::from(b) / U256::from(c)).try_into().ok()
+}
+
+fn try_mul_div_ceil(a: u128, b: u128, c: u128) -> Option<u128> {
+    let p = U256::from(a) * U256::from(b);
+    let c = U256::from(c);
+    ((p + c - U256::one()) / c).try_into().ok()
+}
+
+#[allow(dead_code)]
 fn mul_div_ceil(a: u128, b: u128, c: u128) -> u128 {
     let p = U256::from(a) * U256::from(b);
     let c = U256::from(c);
@@ -880,8 +897,11 @@ pub fn join_math(
         }
         return Ok((near_in, near_in, usdc_in));
     }
-    let by_near = if near_bal > 0 { Some(mul_div_floor(near_in, total_shares, near_bal)) } else { None };
-    let by_usdc = if usdc_bal > 0 { Some(mul_div_floor(usdc_in, total_shares, usdc_bal)) } else { None };
+    // Checked maths: this runs inside the join callback, which must refuse and refund rather than
+    // panic, or the joiner's NEAR would be stranded. A fund drained to a few units can make the
+    // share count overflow; that join is refused.
+    let by_near = if near_bal > 0 { Some(try_mul_div_floor(near_in, total_shares, near_bal).ok_or(ERR_JOIN_OVERFLOW)?) } else { None };
+    let by_usdc = if usdc_bal > 0 { Some(try_mul_div_floor(usdc_in, total_shares, usdc_bal).ok_or(ERR_JOIN_OVERFLOW)?) } else { None };
     let issued = match (by_near, by_usdc) {
         (Some(a), Some(b)) => a.min(b),
         (Some(a), None) => a,
@@ -891,8 +911,9 @@ pub fn join_math(
     if issued == 0 {
         return Err(ERR_EMPTY_DEPOSIT);
     }
-    let near_used = mul_div_ceil(issued, near_bal, total_shares).min(near_in);
-    let usdc_used = mul_div_ceil(issued, usdc_bal, total_shares).min(usdc_in);
+    total_shares.checked_add(issued).ok_or(ERR_JOIN_OVERFLOW)?;
+    let near_used = try_mul_div_ceil(issued, near_bal, total_shares).ok_or(ERR_JOIN_OVERFLOW)?.min(near_in);
+    let usdc_used = try_mul_div_ceil(issued, usdc_bal, total_shares).ok_or(ERR_JOIN_OVERFLOW)?.min(usdc_in);
     Ok((issued, near_used, usdc_used))
 }
 

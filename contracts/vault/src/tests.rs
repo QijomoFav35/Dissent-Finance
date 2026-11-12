@@ -886,3 +886,35 @@ fn a_claim_that_keeps_bouncing_does_not_grow_the_stored_record() {
     assert_eq!(v.get_claimable(acc("alice.near")).1 .0, 100 * USDC);
     assert_books(&v, Token::Usdc);
 }
+
+#[test]
+#[should_panic(expected = "ERR_REASON_TOO_LONG")]
+fn an_exit_reason_longer_than_a_hash_is_refused() {
+    let (mut v, env) = five_members();
+    env.call(&acc("alice.near"), 0);
+    v.exit(Some("x".repeat(MAX_REASON + 1)));
+}
+
+#[test]
+fn an_exit_reason_the_length_of_a_hash_is_accepted() {
+    let (mut v, env) = five_members();
+    env.call(&acc("alice.near"), 0);
+    v.exit(Some("a".repeat(64)));
+    assert_eq!(v.get_shares(acc("alice.near")).0, 0);
+}
+
+#[test]
+fn a_join_whose_share_maths_would_overflow_is_refused_and_refunded() {
+    // A fund drained to 1 yoctoNEAR with ~1e25 shares outstanding: a new NEAR deposit would be
+    // worth more shares than fit in u128. The join must refuse and refund, not panic.
+    assert_eq!(join_math(10 * NEAR, 1, 1_000_000, 10 * NEAR, 1_000_000), Err(ERR_JOIN_OVERFLOW));
+    let (mut v, env) = setup();
+    join(&mut v, &env, "alice.near", 10 * NEAR, 100 * USDC);
+    v.near_balance = 1; // what a near-total NEAR spend would leave
+    SENT.with(|s| s.borrow_mut().clear());
+    let issued = join(&mut v, &env, "ben.near", 10 * NEAR, 100 * USDC);
+    assert_eq!(issued, 0);
+    let refunded: u128 = SENT.with(|s| s.borrow().iter().filter(|(to, t, _)| to == &acc("ben.near") && *t == Token::Near).map(|(_, _, a)| *a).sum());
+    assert_eq!(refunded, 10 * NEAR, "the NEAR goes back");
+    assert_eq!(v.joining_near, 0, "nothing left counted as joining");
+}

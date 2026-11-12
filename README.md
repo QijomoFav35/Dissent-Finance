@@ -26,25 +26,28 @@ While the window is open:
 - members whose approval the vault recorded can't exit until the spend is settled, so they can't approve a payment and then leave before it lands. This starts when the spend is queued: a member who votes Approve and leaves before the vote that passes it is no longer a holder, so their approval isn't recorded and they aren't bound
 - nobody can join, so a late deposit can't dilute anyone's share
 - the vault records approvals only from accounts that hold shares, so a council member who has left the vault can't block a spend by approving it, and a spend no holder approved is refused. Their vote still counts toward the DAO's own threshold, because the DAO's rules are unchanged
-- at most 8 spends can be open at once, and memos are capped at 256 bytes, so agents can always read every open spend and an exit always fits its gas
+- at most 8 spends can be open at once, and memos are capped at 256 bytes, so agents can always read every open spend and an exit's work stays small (the sandbox tests run every exit at the 80 Tgas the agents attach on mainnet)
 
 After the window, `execute_spend` pays the receiver plus a 0.1% fee, if the vault can still afford it. If it can't, `cancel_spend` marks it cancelled. The fee goes to the fee account set when the vault was created (for the mainnet vault, `dissentfinance.near`) and can't be changed afterwards.
 
-The vault pays for its own storage from the same NEAR balance that holds members' money. Every call that can add stored data (a deposit toward a join, a join, a rule change, a new spend) is refused if the vault's storage would then eat into what it owes members, joiners or claimants, or into a reserve kept for exits, cancels and claims. Only joins, spends, executes, exits and cancels are kept in the stored record; deposits, refused joins, rule changes, claims and failed transfers go to the transaction log only, so nobody can grow the record in a loop. USDC deposits toward a join must be at least 0.1 USDC, and a pending deposit can be taken back with `cancel_join`.
+The vault pays for its own storage from the same NEAR balance that holds members' money. The calls that can add stored data without limit (a deposit toward a join, a join, a rule change, a new spend) are refused if the vault's storage would then eat into what it owes members, joiners or claimants, or into a reserve kept for the calls that must always work. Those calls (exit, cancel, execute, claim) add at most a few hundred bytes each, bounded by the number of members and spends, and exit reasons are capped at 64 characters, the length of a hash. Only joins, spends, executes, exits and cancels are kept in the stored record; deposits, refused joins, rule changes, claims and failed transfers go to the transaction log only, so nobody can grow the record in a loop. USDC deposits toward a join must be at least 0.1 USDC, and a pending deposit can be taken back with `cancel_join`.
 
-The agent (`agent/`) reads only public views. It checks each open spend against its owner's rules, which are three numbers and lists stored in the vault: the largest share of the fund one spend may take, whether the receiver must have been paid before, and blocked receivers. It never reads the proposal's description, so the text of a proposal can't talk it out of leaving. Before exiting it writes a note with every check it ran and sends the note's SHA-256 hash on chain with the `exit` call, so anyone can match the note to the exit later. The note is written once; if the exit fails (a busy RPC endpoint, say) the agent retries with the same hash on every pass until the spend's window closes.
+The agent (`agent/`) reads only public views. It checks each open spend against its owner's rules, which are three numbers and lists stored in the vault: the largest share of the fund one spend may take, whether the receiver must have been paid before, and blocked receivers. It never reads the proposal's description, so the text of a proposal can't talk it out of leaving. Before exiting it writes a note with every check it ran and sends the note's SHA-256 hash on chain with the `exit` call, so anyone can match the note to the exit later. The note is written once; if the exit fails (a busy RPC endpoint, say) the agent retries with the same hash while the spend is still open, backing off from 2 seconds up to a minute, for at most 20 attempts so it can't use up the key's gas allowance.
 
-The agent signs with a NEAR function-call key that the member adds to their own account, limited to the vault and to `exit` and `cancel_spend`, with no deposit allowed. The NEAR runtime refuses anything else signed with it. A stolen key can make its owner leave with their own money, attach a misleading note hash to that exit, and spend up to its 0.25 NEAR gas allowance. It can't send anyone's funds anywhere else.
+The agent signs with a NEAR function-call key that the member adds to their own account, limited to the vault and to `exit` and `cancel_spend`, with no deposit allowed. The NEAR runtime refuses anything else signed with it. A stolen key can make its owner leave with their own money, attach a misleading 64-character reason to that exit, and spend up to its 0.25 NEAR gas allowance. It can't send anyone's funds anywhere else.
 
 The rules are deterministic on purpose: the same spend, rules and fund always give the same decision, and anyone can replay it from the note. There is no model in the exit path.
 
 ## Known limits
 
 - The vault is a separate contract next to the DAO, so the DAO's own rules still decide what passes. The vault decides only whether a passed spend can be paid, and when.
-- Members' exits are protected, but the vault's spare storage is not. Outsiders with 0.1 USDC each can fill it with pending deposits (about 115 of them for the mainnet vault). Exits, cancels and claims keep working; new joins, rule changes and spends are refused until someone sends the vault a little NEAR, which anyone can do.
-- The reserve grows with the number of members, about 1 KB each. The mainnet vault was funded for a small group; past roughly 15 members, joins need someone to send it more NEAR first.
+- Members' exits are protected, but the vault's spare storage is not. Outsiders with 0.1 USDC each can fill it with pending deposits: each takes roughly 150 bytes, so about a hundred of them fill the mainnet vault's spare room. The USDC stays theirs and comes back with `cancel_join`. Exits, cancels and claims keep working; new joins, rule changes and spends are refused until someone sends the vault a little NEAR, which anyone can do.
+- The reserve grows with the number of members, about 1 KB each. The mainnet vault was funded with 0.25 NEAR above its code's storage, enough for a small group; a larger group needs someone to send it more NEAR first.
 - At most 8 spends can be open at once. A majority that keeps 8 slots full can stop new spends and joins, though doing so keeps their own exits locked.
 - If a spend's payment bounces and the receiver later claims it, the receiver is still counted as never paid, which only matters for the "new receiver" rule.
+- The spend window is set when a vault is created and can't change once its key is deleted. The mainnet vaults use 10 minutes so a full cycle can be watched; a real group would choose hours or days.
+- NEAR or USDC sent to the vault in any way other than `ft_transfer_call` with msg "join" plus `join` is not credited to anyone and can't be recovered.
+- The vault reads the DAO's `get_policy` and `get_proposal`. A future Sputnik upgrade that changed their shape would stop new joins and spends; exits don't read the DAO and would keep working.
 - The agent runs on the member's own machine or server. If it is offline for the whole window, the member can still exit by hand.
 
 ## Run it yourself
@@ -65,7 +68,7 @@ You need Rust 1.95 (pinned in `rust-toolchain.toml`) with the `wasm32-unknown-un
    cd agent && npm install && npm test
    ```
 
-   You should see 29 pass, 0 fail. They include the story above, retries that reuse the same note until the window closes, a prompt injection in the spend's memo, five separate agents each with only its own key, and the simulation below.
+   You should see 30 pass, 0 fail. They include the story above, retries that reuse the same note with a backoff and a cap, a prompt injection in the spend's memo, five separate agents each with only its own key, and the simulation below.
 
 3. Contract unit and property tests.
 
@@ -73,7 +76,7 @@ You need Rust 1.95 (pinned in `rust-toolchain.toml`) with the `wasm32-unknown-un
    cd contracts/vault && cargo test --lib
    ```
 
-   You should see 60 passed. The two property tests run random sequences of joins, spends, votes, exits and claims and check after every step that shares add up, the books balance per token, exits pay the exact pro-rata amount and nothing executes early or twice. They take several minutes at 256 cases. `PROPTEST_CASES=32 cargo test --lib` runs a shorter pass.
+   You should see 64 passed. The two property tests run random sequences of joins, spends, votes, exits and claims and check after every step that shares add up, the books balance per token, exits pay the exact pro-rata amount and nothing executes early or twice. They take several minutes at 256 cases. `PROPTEST_CASES=32 cargo test --lib` runs a shorter pass.
 
 4. End to end against the real Sputnik code.
 
@@ -98,6 +101,15 @@ You need Rust 1.95 (pinned in `rust-toolchain.toml`) with the `wasm32-unknown-un
    ```
 
    You should see the table in the next section.
+
+7. The mainnet run, checked against the chain. Needs only Node, no keys and no installs.
+
+   ```
+   node agent/mainnet/verify.mjs
+   node agent/mainnet/verify.mjs --vault vault
+   ```
+
+   For v2 and then v1, it fetches every exit transaction in `agent/mainnet/evidence.jsonl` from the chain, reads the exit event the vault logged, and checks its `reason_hash` against the published note, hashed on your machine. It also checks the code hash, the vault's access keys, the spend's status and that each leaver holds no shares. It should end with `All checks passed`.
 
 ## What agents with varied rules would have done to real contested spends
 
@@ -169,7 +181,7 @@ near contract call-function as-read-only vault.dissentfinance.near get_spend jso
 near contract call-function as-read-only vault.dissentfinance.near get_balances json-args '{}' network-config mainnet now
 ```
 
-Should show spend 0 as `Cancelled`, and a vault of 400000 USDC units (0.4 USDC) with 2 members.
+Should show spend 0 as `Cancelled`, and (since Ben and Cara later left too) a vault holding 0 USDC with 0 members.
 
 ## On mainnet: v2
 
@@ -189,7 +201,7 @@ The same story, live on 12 November 2026:
 | Emma's agent exits (Ben is on her blocked list) | [GqsAoKSZ](https://nearblocks.io/txns/GqsAoKSZsysmtKKA37Vq5vX3pbsFWgrRMgWkjVWfeTUa) |
 | Emma's agent cancels spend 0, now unaffordable | [4cA4kFtv](https://nearblocks.io/txns/4cA4kFtvvuz6bVb5FRjP35Q76sHQKq3hWsabd59xLAAT) |
 
-By the story script's clock the spend was cancelled 6 seconds after it was queued; the page shows the block times from the vault's own record. Alice, Dan and Emma each got exactly 0.2 USDC back, Ben got nothing, and 0.4 USDC stayed in the vault for Ben and Cara. The exit and cancel transactions above were written to `agent/mainnet/evidence.jsonl` by the story script from the agents' own state files, and the five notes are in `agent/mainnet/notes/vault2/`.
+By the vault's own timestamps the spend was queued at 13:31:09 UTC, the three exits landed at 13:31:17 and 13:31:18, and the cancel at 13:31:21, 12 seconds after the queue. Alice, Dan and Emma each got exactly 0.2 USDC back, Ben got nothing, and 0.4 USDC stayed in the vault for Ben and Cara. The exit and cancel transactions above were written to `agent/mainnet/evidence.jsonl` by the story script from the agents' own state files, and the five notes are in `agent/mainnet/notes/vault2/`.
 
 Ben's v2 agent key was then used three ways it should never work, with `agent/mainnet/key-check.mjs`, which records only the runtime's own answer and retries busy RPC endpoints:
 

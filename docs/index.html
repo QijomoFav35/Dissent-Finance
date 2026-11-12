@@ -95,10 +95,10 @@
 
   <h2>Check it without this page</h2>
   <p>With <code>near</code> CLI. None of these need an account.</p>
-<pre>near contract verify deployed-at vault.dissentfinance.near network-config mainnet now
-near account view-account-summary vault.dissentfinance.near network-config mainnet now
-near contract call-function as-read-only vault.dissentfinance.near get_spend json-args '{"spend_id":0}' network-config mainnet now
-near contract call-function as-read-only vault.dissentfinance.near get_record json-args '{"from_index":0,"limit":100}' network-config mainnet now</pre>
+<pre id="cli">near contract verify deployed-at VAULT_ID network-config mainnet now
+near account view-account-summary VAULT_ID network-config mainnet now
+near contract call-function as-read-only VAULT_ID get_spend json-args '{"spend_id":0}' network-config mainnet now
+near contract call-function as-read-only VAULT_ID get_record json-args '{"from_index":0,"limit":100}' network-config mainnet now</pre>
 
   <footer>Data from NEAR mainnet RPC and raw.githubusercontent.com. No wallet, no tracking, no build step: view the source of this page to see every call it makes.</footer>
 </main>
@@ -296,6 +296,7 @@ async function load() {
 $("switch").innerHTML = Object.entries(VAULTS).map(([k, v]) => k === PICK ? `<strong>${v.label}</strong>` : `<a href="?v=${k}">${v.label}</a>`).join(" · ");
 document.querySelector('a[href="https://nearblocks.io/address/vault.dissentfinance.near"]')?.setAttribute("href", `https://nearblocks.io/address/${VAULT}`);
 document.querySelectorAll(".v.mono a").forEach((a) => { if (a.textContent === "vault.dissentfinance.near") a.textContent = VAULT; });
+$("cli").textContent = $("cli").textContent.replaceAll("VAULT_ID", VAULT);
 $("reload").addEventListener("click", load);
 load();
 </script>
