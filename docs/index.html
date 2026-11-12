@@ -142,6 +142,16 @@
 
   .nots { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); margin-top: 18px; }
   .nots .panel p { color: var(--muted); font-size: 0.92rem; margin: 0; }
+  .try { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin-top: 18px; }
+  @media (max-width: 760px) { .try { grid-template-columns: 1fr; } }
+  .try label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px dashed var(--line); font-size: 0.93rem; cursor: pointer; }
+  .try label:last-of-type { border-bottom: 0; }
+  .try input[type="checkbox"] { margin-top: 4px; accent-color: var(--accent); }
+  .try input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .try input[type="text"] { width: 100%; font: 0.86rem var(--mono); padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--ink); }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+  .verdict { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; margin: 2px 0 8px; }
+  .try pre { margin: 8px 0 0; max-height: 220px; overflow: auto; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: 0.74rem/1.5 var(--mono); }
   footer.end { margin: 64px 0 40px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.86rem; }
 </style>
 </head>
@@ -155,6 +165,7 @@
     </a>
     <nav class="sections" aria-label="Sections">
       <a href="#outcomes">Outcomes</a>
+      <a href="#try">Try it</a>
       <a href="#how">How it works</a>
       <a href="#run">Live run</a>
       <a href="#track">Track</a>
@@ -200,6 +211,31 @@
         <header><p class="eyebrow">With Dissent Finance, on mainnet</p><h3>Those who disagreed leave first</h3></header>
         <ol id="vs-right"><li><div class="dot">…</div><div class="pending">Reading…</div></li></ol>
         <footer id="vs-right-foot"></footer>
+      </div>
+    </div>
+  </section>
+
+  <section id="try">
+    <p class="eyebrow">Try it, no wallet</p>
+    <h2>Be the sixth member. Write your rules and see what your agent does.</h2>
+    <p class="sub" id="try-lede">You join with the same deposit as each of the five. Your browser loads the agent's own rules file from the repo and runs it against the spend above.</p>
+    <div class="try">
+      <div class="panel">
+        <div class="eyebrow">Your rules</div>
+        <div class="presets" id="try-presets"></div>
+        <label><input type="checkbox" id="try-max" checked><span style="flex:1">Leave if one spend takes more than <b id="try-max-v">20</b>% of the fund<input type="range" id="try-max-r" min="1" max="100" value="20" aria-label="Spend share limit, percent"></span></label>
+        <label><input type="checkbox" id="try-new"><span>Leave if the receiver was never paid by the vault before</span></label>
+        <label><input type="checkbox" id="try-blk"><span style="flex:1">Leave if the receiver is on my blocked list<input type="text" id="try-blk-v" value="ben.dissentfinance.near" aria-label="Blocked receivers, comma separated" spellcheck="false"></span></label>
+        <label><input type="checkbox" id="try-appr"><span>I voted Approve on this spend</span></label>
+      </div>
+      <div class="panel" aria-live="polite">
+        <div class="eyebrow">Your agent decides</div>
+        <div class="verdict pending" id="try-verdict">Loading the agent's rules…</div>
+        <ul id="try-checks" style="margin:0 0 6px;padding-left:18px;font-size:.92rem"></ul>
+        <div id="try-share" class="sub" style="font-size:.9rem"></div>
+        <div class="hash mono" id="try-hash" style="font-size:.74rem;word-break:break-all;color:var(--muted);margin-top:8px"></div>
+        <pre id="try-note"></pre>
+        <div id="try-src" style="font-size:.8rem;color:var(--muted);margin-top:6px"></div>
       </div>
     </div>
   </section>
@@ -291,7 +327,7 @@ node agent/mainnet/verify.mjs VAULT_FLAG</pre><button class="btn copy" type="but
 near account view-account-summary VAULT_ID network-config mainnet now
 near contract call-function as-read-only VAULT_ID get_spend json-args '{"spend_id":0}' network-config mainnet now
 near contract call-function as-read-only VAULT_ID get_record json-args '{"from_index":0,"limit":100}' network-config mainnet now</pre><button class="btn copy" type="button" data-for="cli">Copy</button></div>
-    <p class="sub">The tests run from a clone too: 64 contract tests (two of them property tests) with <code>cargo test --lib</code>, sandbox tests against the real Sputnik DAO, 37 agent tests with <code>npm test</code>, 7 tests of this page in a headless browser, and a replay of real DAO spends with 30 rule profiles. Steps in the <a href="https://github.com/QijomoFav35/Dissent-Finance#run-it-yourself">README</a>.</p>
+    <p class="sub">The tests run from a clone too: 64 contract tests (two of them property tests) with <code>cargo test --lib</code>, sandbox tests against the real Sputnik DAO, 37 agent tests with <code>npm test</code>, 8 tests of this page in a headless browser, and a replay of real DAO spends with 30 rule profiles. Steps in the <a href="https://github.com/QijomoFav35/Dissent-Finance#run-it-yourself">README</a>.</p>
   </section>
 
   <section id="not">
@@ -465,6 +501,10 @@ async function load() {
       $("vs-left").innerHTML = $("vs-right").innerHTML = `<li><div class="dot">–</div><div class="pending">No spend in this vault yet.</div></li>`;
     }
 
+    // ---------- context for "Try it" ----------
+    const paidBefore = spend ? record.some((e) => e.event === "execute_spend" && e.data?.[0]?.recipient === spend.recipient && queuedAt && BigInt(e.ts) < BigInt(queuedAt)) : false;
+    TRY.ctx = spend ? { spend, fundUsdc: fundAtQueue, paidBefore, members: MEMBERS.length } : null;
+
     // ---------- timeline from the vault's record ----------
     const rows = [];
     for (const ev of record) {
@@ -492,6 +532,8 @@ async function load() {
         return { m, published, computed: await sha256(canonical(published.note)) };
       } catch { return { m, missing: true }; }
     }));
+    TRY.presets = notes.filter((x) => x.published).map((x) => ({ who: cap(short(x.m)), rules: x.published.note.rules, approved: x.published.note.approved_by_member, fund: x.published.note.fund }));
+    tryInit();
     let allMatch = true, matched = 0;
     $("notes").innerHTML = notes.map(({ m, published, computed, missing }) => {
       if (missing) { allMatch = false; return `<div class="panel note"><h3>${short(m)}</h3><p class="bad">Note not found in the repo.</p></div>`; }
@@ -540,6 +582,7 @@ async function load() {
     $("status").textContent = "Could not read mainnet";
     $("error").className = "panel bad show";
     $("error").textContent = `Every RPC endpoint failed: ${e?.message ?? e}. Try "Read again" in a minute.`;
+    $("try-verdict").textContent = "Could not read the spend from mainnet.";
   }
 }
 
@@ -573,6 +616,81 @@ $("switch").innerHTML = Object.entries(VAULTS).map(([k, v]) => `<a href="?v=${k}
 $("vaultline").innerHTML = `Showing <span class="mono">${VAULT}</span>${PICK === "vault" ? " (the first run, keyless)" : ""}.`;
 $("cli").textContent = $("cli").textContent.replaceAll("VAULT_ID", VAULT);
 $("cmd-verify").textContent = $("cmd-verify").textContent.replace(" VAULT_FLAG", VAULTS[PICK].flag ? ` ${VAULTS[PICK].flag}` : "");
+// ---------- try it: the agent's own rules.js, run in the browser ----------
+const TRY = { ctx: null, presets: [], mod: null, src: null, ready: false };
+const RULES_URL = "https://raw.githubusercontent.com/QijomoFav35/Dissent-Finance/main/agent/src/rules.js";
+async function loadRules() {
+  if (TRY.mod) return TRY.mod;
+  if (TRY.loading) return TRY.loading;
+  TRY.loading = fetchRules().finally(() => { TRY.loading = null; });
+  return TRY.loading;
+}
+async function fetchRules() {
+  const text = await fetch(RULES_URL).then((r) => { if (!r.ok) throw new Error(`rules.js ${r.status}`); return r.text(); });
+  TRY.src = { sha: await sha256(text), lines: text.split("\n").length };
+  const url = URL.createObjectURL(new Blob([text], { type: "text/javascript" }));
+  TRY.mod = await import(url);
+  URL.revokeObjectURL(url);
+  return TRY.mod;
+}
+function tryRules() {
+  const blocked = $("try-blk-v").value.split(",").map((x) => x.trim()).filter(Boolean);
+  return {
+    max_spend_share_bps: $("try-max").checked ? Number($("try-max-r").value) * 100 : null,
+    new_recipient: $("try-new").checked,
+    blocked_recipients: $("try-blk").checked ? blocked : [],
+  };
+}
+async function tryRun() {
+  if (!TRY.ctx) { $("try-verdict").textContent = "No spend in this vault to try against."; return; }
+  let mod;
+  try { mod = await loadRules(); } catch (e) { $("try-verdict").className = "verdict bad"; $("try-verdict").textContent = "Could not load the agent's rules from the repo."; return; }
+  const { spend, fundUsdc, paidBefore, members } = TRY.ctx;
+  // You join as a sixth member with the same deposit as each of the five, so the fund grows by one share.
+  const seen = TRY.presets[0]?.fund ?? { near: "0", usdc: String(fundUsdc) };
+  const mineUsdc = BigInt(seen.usdc) / BigInt(members), mineNear = BigInt(seen.near) / BigInt(members);
+  const fund = { near: String(BigInt(seen.near) + mineNear), usdc: String(BigInt(seen.usdc) + mineUsdc) };
+  const rules = tryRules();
+  const approved = $("try-appr").checked;
+  // The same branch the live agent takes (agent/src/agent.js): an approver stays, the vault would refuse its exit.
+  const result = approved
+    ? { decision: "stay", checks: [{ rule: "approved", limit: null, value: "member voted Approve", broken: false }] }
+    : mod.evaluate(spend, rules, { balances: fund, recipientPaidBefore: paidBefore });
+  const exit = result.decision === "exit";
+  $("try-verdict").className = `verdict ${exit ? "bad" : "ok"}`;
+  $("try-verdict").textContent = exit ? "Exit before it pays" : "Stay";
+  $("try-checks").innerHTML = result.checks.map((c) => `<li>${describeRule(c)} ${c.broken ? '<span class="bad">Broken.</span>' : '<span class="ok">Kept.</span>'}</li>`).join("") || "<li>No rules set, so nothing can be broken.</li>";
+  $("try-share").innerHTML = exit
+    ? `You joined with ${usdc(mineUsdc)} USDC like each of the five. Your agent would take your ${usdc(mineUsdc)} USDC out before ${short(spend.recipient)} is paid.`
+    : `Your share stays in. If the spend pays, ${Math.round(Number((BigInt(spend.amount) * 1000n) / BigInt(fund.usdc)) / 10)}% of the fund goes to ${short(spend.recipient)}.`;
+  const note = { v: 1, agent: "dissent-exit-agent/0.1.0", vault: VAULT, member: "you", spend: { id: spend.id, proposal_id: spend.proposal_id, recipient: spend.recipient, token: spend.token, amount: spend.amount, window_ends: spend.window_ends }, fund, rules, approved_by_member: approved, checks: result.checks, decision: result.decision };
+  const h = await sha256(canonical(note));
+  $("try-hash").textContent = `sha256 of this note: ${h}. A real agent's note also carries the time it was written, and its hash goes on chain as the exit's reason_hash.`;
+  $("try-note").textContent = JSON.stringify(note, null, 2);
+  $("try-src").innerHTML = `Rules from <a href="https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/rules.js">agent/src/rules.js</a>, ${TRY.src.lines} lines, sha256 ${TRY.src.sha.slice(0, 16)}…, as it is on the main branch now.`;
+}
+function tryApply(p) {
+  const r = p.rules || {};
+  $("try-max").checked = r.max_spend_share_bps != null;
+  if (r.max_spend_share_bps != null) { $("try-max-r").value = Math.max(1, Math.round(r.max_spend_share_bps / 100)); $("try-max-v").textContent = $("try-max-r").value; }
+  $("try-new").checked = !!r.new_recipient;
+  $("try-blk").checked = !!(r.blocked_recipients && r.blocked_recipients.length);
+  if (r.blocked_recipients?.length) $("try-blk-v").value = r.blocked_recipients.join(", ");
+  $("try-appr").checked = !!p.approved;
+  tryRun();
+}
+function tryInit() {
+  $("try-presets").innerHTML = '<span class="pending" style="font-size:.82rem;align-self:center">Start from:</span>' + TRY.presets.map((p, i) => `<button class="btn" type="button" data-p="${i}">${p.who}'s rules</button>`).join("");
+  $("try-presets").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => tryApply(TRY.presets[Number(b.dataset.p)])));
+  if (!TRY.ready) {
+    TRY.ready = true;
+    for (const id of ["try-max", "try-new", "try-blk", "try-appr"]) $(id).addEventListener("change", tryRun);
+    $("try-max-r").addEventListener("input", () => { $("try-max-v").textContent = $("try-max-r").value; $("try-max").checked = true; tryRun(); });
+    $("try-blk-v").addEventListener("input", () => { $("try-blk").checked = true; tryRun(); });
+  }
+  tryRun();
+}
+
 // ---------- proof: the DAO, the agent keys and the guard on duty ----------
 const FACTORY = "sputnik-dao.near";
 const REPO_API = "https://api.github.com/repos/QijomoFav35/Dissent-Finance/actions/workflows";

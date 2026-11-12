@@ -46,22 +46,22 @@ function chain({ later = false, wrongHash = false } = {}) {
   };
 }
 
-// v2's run on 12 November, from its published notes.
+// v2's run on 12 November: the vault's record exactly as mainnet returns it (fixtures/v2-record.json,
+// read with get_record on 2026-11-12), with the balances and shares the chain holds now.
 function chainV2() {
-  const record = [];
-  for (const m of ["alice", "ben", "cara", "dan", "emma"]) record.push(ev("join", { account_id: N(m), shares: "100", near: "100000000000000000000000", usdc: "200000" }, "2026-11-12T13:10:00Z"));
-  record.push(ev("queue_spend", { spend_id: 0, proposal_id: 1, recipient: N("ben"), amount: "600000", approve: 2, not_approve: 0 }, "2026-11-12T13:31:09Z"));
-  for (const [m, t] of [["alice", "13:31:17"], ["dan", "13:31:17"], ["emma", "13:31:18"]]) record.push(ev("exit", { account_id: N(m), shares: "100", near: "100000000000000000000000", usdc: "200000", reason_hash: note(m, "notes/vault2").hash }, `2026-11-12T${t}Z`));
-  record.push(ev("cancel_spend", { spend_id: 0, by: N("emma") }, "2026-11-12T13:31:21Z"));
+  const record = JSON.parse(fs.readFileSync(path.join(here, "fixtures", "v2-record.json"), "utf8"));
   const base = chain();
+  const stayed = [N("ben"), N("cara")];
   return {
     ...base,
     vault: "vault2.dissentfinance.near",
     code: "AJBeJNNHfRTP2SXV1q7yzsYVTxHaaV8roipVjJN2G3Zx",
-    get_spend: { ...base.get_spend, proposal_id: 1, window_ends: "1794490869844300751" },
+    get_balances: { near: "200000000000000000000000", usdc: "400000", total_shares: "200000000000000000000000", members: 2, open_spends: 0 },
+    get_spend: { ...base.get_spend, proposal_id: 1, queued_at: "1794490269844300751", window_ends: "1794490869844300751" },
     get_proposal: { ...base.get_proposal, id: 1 },
     get_record_len: record.length,
     get_record: record,
+    get_shares: (a) => (stayed.includes(a.account_id) ? "100000000000000000000000" : "0"),
     contract_source_metadata: { link: "https://github.com/QijomoFav35/Dissent-Finance/tree/3f141922351559fe851c2c52f7489b058ec476a7" },
     ft_balance_of: (a) => (["alice", "dan", "emma"].some((m) => a.account_id === N(m)) ? "200000" : a.account_id === "vault2.dissentfinance.near" ? "400000" : "0"),
   };
@@ -87,7 +87,7 @@ async function open(views, { width = 1200, query = "?v=vault", guard = { status:
     await route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ jsonrpc: "2.0", id: body.id, result }) });
   });
   await page.route(/raw\.githubusercontent\.com/, async (route) => {
-    const f = path.join(repo, "agent/mainnet", route.request().url().split("/agent/mainnet/")[1]);
+    const f = path.join(repo, route.request().url().split("/Dissent-Finance/main/")[1]);
     if (fs.existsSync(f)) await route.fulfill({ status: 200, body: fs.readFileSync(f), headers: { "access-control-allow-origin": "*" } });
     else await route.fulfill({ status: 404, body: "" });
   });
@@ -166,7 +166,7 @@ test("v2: its own record and notes, and the guard run on duty in the proof panel
   try {
     await p.page.waitForFunction(() => !document.getElementById("proofrows").textContent.includes("Reading"), null, { timeout: 20000 });
     assert.match(await p.text("#status"), /^All checks pass/);
-    assert.match(await p.text("#vs-right"), /Alice's agent exits, \+8 s.*Dan's agent exits, \+8 s.*Emma's agent exits, \+9 s.*Spend cancelled, \+12 s/);
+    assert.match(await p.text("#vs-right"), /Emma's agent exits, \+8\.027 s.*Alice's agent exits, \+8\.027 s.*Dan's agent exits, \+8\.687 s.*Spend cancelled, \+11\.209 s/);
     assert.match(await p.text("#proofrows"), /PASS\s*Agents on duty\s*A guard run is in progress: run #7, started 42 min ago/);
     assert.deepEqual(p.errors, []);
   } finally {
@@ -184,6 +184,30 @@ test("v2: when GitHub's API refuses, the guard row says so instead of failing", 
   }
 });
 
+test("try it: the agent's own rules.js decides, for presets and for your own rules", async () => {
+  const p = await open(chainV2(), { query: "" });
+  try {
+    await p.page.waitForFunction(() => /Exit|Stay/.test(document.getElementById("try-verdict").textContent), null, { timeout: 20000 });
+    assert.match(await p.text("#try-src"), /agent\/src\/rules\.js, \d+ lines, sha256 [0-9a-f]{16}/);
+    await p.page.getByRole("button", { name: "Alice's rules" }).click();
+    await p.page.waitForFunction(() => document.getElementById("try-verdict").textContent === "Exit before it pays");
+    assert.match(await p.text("#try-checks"), /more than 20% of the fund\. This one takes 50%\. Broken\./);
+    assert.match(await p.text("#try-share"), /joined with 0\.20 USDC like each of the five\. Your agent would take your 0\.20 USDC out before ben is paid/);
+    await p.page.getByRole("button", { name: "Ben's rules" }).click();
+    await p.page.waitForFunction(() => document.getElementById("try-verdict").textContent === "Stay");
+    assert.match(await p.text("#try-checks"), /Voted Approve/);
+    await p.page.uncheck("#try-appr");
+    await p.page.uncheck("#try-max");
+    await p.page.waitForFunction(() => document.getElementById("try-checks").textContent.includes("No rules set"));
+    await p.page.check("#try-new");
+    await p.page.waitForFunction(() => document.getElementById("try-verdict").textContent === "Exit before it pays");
+    assert.match(await p.text("#try-hash"), /^sha256 of this note: [0-9a-f]{64}\. A real agent's note also carries the time/);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});
+
 test("on a phone the page does not scroll sideways", async () => {
   const p = await open(chain(), { width: 390 });
   try {
@@ -192,3 +216,17 @@ test("on a phone the page does not scroll sideways", async () => {
     await p.close();
   }
 });
+
+// SHOT=<folder> node --test page.test.js also saves full-page screenshots of v2 there, for review.
+if (process.env.SHOT) {
+  test("screenshots", async () => {
+    for (const [name, width] of [["desktop", 1280], ["phone", 390]]) {
+      const p = await open(chainV2(), { query: "", width });
+      await p.page.waitForFunction(() => /Exit|Stay/.test(document.getElementById("try-verdict").textContent) && !document.getElementById("proofrows").textContent.includes("Reading"), null, { timeout: 20000 });
+      await p.page.getByRole("button", { name: "Alice's rules" }).click();
+      await p.page.waitForTimeout(400);
+      await p.page.screenshot({ path: path.join(process.env.SHOT, `${name}.png`), fullPage: true });
+      await p.close();
+    }
+  });
+}

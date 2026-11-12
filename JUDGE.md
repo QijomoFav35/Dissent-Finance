@@ -19,10 +19,11 @@ The track: "Build shared budgets, programmable rewards, collective ownership and
 
 1. **Open https://qijomofav35.github.io/Dissent-Finance/.** Your browser reads mainnet directly. See four checks at the top: the code hash is the reproducible build, 3 of 3 exit notes match the chain, the spend was cancelled, and the access-key count.
 2. **Read "The same vote, two outcomes".** Two of five members approve paying Ben 60% of the fund. Without the vault (a counterfactual, labelled as one), the DAO pays 0.60 USDC and everyone shares the loss. With the vault, on mainnet: three agents exit with their exact 0.20 USDC each within seconds, and the spend is cancelled because the vault can no longer pay it. 0 USDC paid out.
-3. **Scroll to "The live run" and tap "Replay the spend".** The queue, the three exits and the cancel light up in order, read from the vault's own event record, each linked to its transaction.
-4. **Read "The agents' notes".** Each card is a note an agent wrote before acting: the rule it checked, the numbers and its decision. The page fetches each note from this repo, hashes it in your browser and shows it matches the `reason_hash` that exit carried on chain.
-5. **Switch v1 / v2 at the top right.** v1 (`vault.dissentfinance.near`) ran the first live story and has no access keys. v2 (`vault2.dissentfinance.near`) has the fixes found in review and ran the same story on 12 November 2026.
-6. **Open Trezu** from the "Track" section and see the same two spends as executed requests in the DAO.
+3. **Try it, no wallet.** Under "Be the sixth member", tap "Alice's rules", then change the rules yourself. You join with the same deposit as each of the five. Your browser loads `agent/src/rules.js` from this repo (the page shows its sha256), runs it against the real spend, and shows the decision, the note in the agents' format and its hash (a real note also carries the time it was written).
+4. **Scroll to "The live run" and tap "Replay the spend".** The queue, the three exits and the cancel light up in order, read from the vault's own event record, each linked to its transaction.
+5. **Read "The agents' notes".** Each card is a note an agent wrote before acting: the rule it checked, the numbers and its decision. The page fetches each note from this repo, hashes it in your browser and shows it matches the `reason_hash` that exit carried on chain.
+6. **Switch v1 / v2 at the top right.** v1 (`vault.dissentfinance.near`) ran the first live story and has no access keys. v2 (`vault2.dissentfinance.near`) has the fixes found in review and ran the same story on 12 November 2026.
+7. **Open Trezu** from the "Track" section and see the same two spends as executed requests in the DAO.
 
 ## 2. One-command check (read-only, under a minute)
 
@@ -43,7 +44,7 @@ near contract verify deployed-at vault.dissentfinance.near network-config mainne
 
 ## 3. Tests
 
-See [README, Run it yourself](README.md#run-it-yourself): `npm test` in `agent/` (37 tests, including `verify.mjs` against a stand-in for mainnet with three planted faults it must catch), `npm test` in `tests/page/` (7 tests of the demo page in headless Chromium), `cargo test --lib` in `contracts/vault/` (64 tests, two of them property tests), `cargo test --test sputnik_flow` and `cargo test --test swarm_scenario` (sandbox tests against the real Sputnik DAO contract), and `node agent/sim/swarm.js` (a replay of real DAO spends with 30 rule profiles).
+See [README, Run it yourself](README.md#run-it-yourself): `npm test` in `agent/` (37 tests, including `verify.mjs` against a stand-in for mainnet with three planted faults it must catch), `npm test` in `tests/page/` (8 tests of the demo page in headless Chromium), `cargo test --lib` in `contracts/vault/` (64 tests, two of them property tests), `cargo test --test sputnik_flow` and `cargo test --test swarm_scenario` (sandbox tests against the real Sputnik DAO contract), and `node agent/sim/swarm.js` (a replay of real DAO spends with 30 rule profiles).
 
 ## 4. Agents on duty
 

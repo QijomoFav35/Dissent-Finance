@@ -78,7 +78,7 @@ You need Rust 1.95 (pinned in `rust-toolchain.toml`) with the `wasm32-unknown-un
    cd tests/page && npm install && npx playwright install chromium && npm test
    ```
 
-   You should see 7 pass: v1's checks and two outcomes read from its record, later exits kept out of the spend, a note whose hash does not match failing the page's check, the proof panel, v2 with the guard run on duty, the guard row when GitHub's API refuses, and no sideways scroll on a phone.
+   You should see 8 pass: v1's checks and two outcomes read from its record, later exits kept out of the spend, a note whose hash does not match failing the page's check, the proof panel, v2 with the guard run on duty, the guard row when GitHub's API refuses, the "Try it" panel running the agent's own `rules.js` for presets and custom rules, and no sideways scroll on a phone.
 
 3. Contract unit and property tests.
 

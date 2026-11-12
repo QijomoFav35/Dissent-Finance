@@ -9,6 +9,7 @@
 
 Live page (reads mainnet in the browser): https://qijomofav35.github.io/Dissent-Finance/
 Trezu view of the DAO: https://trezu.app/dissentfinance.sputnik-dao.near/requests?tab=Approved
+On the page, "Try it, no wallet" loads agent/src/rules.js from the repo and runs it in the browser against the real v2 spend with rules the visitor sets, showing the decision, the note and its sha256.
 
 ## Start here
 
@@ -23,7 +24,7 @@ Trezu view of the DAO: https://trezu.app/dissentfinance.sputnik-dao.near/request
 ## Tests
 
 - `cd agent && npm ci && npm test`: 37 tests. Agent decisions and retries, note hashing, rules, the swarm simulation, the guard refusing any key broader than an agent key, and verify.mjs against a stand-in for mainnet with three planted faults it must catch.
-- `cd tests/page && npm install && npx playwright install chromium && npm test`: 7 tests of the demo page in headless Chromium.
+- `cd tests/page && npm install && npx playwright install chromium && npm test`: 8 tests of the demo page in headless Chromium.
 - `cd contracts/vault && cargo test --lib`: 64 tests, two of them property tests (shares add up, books balance per token, exits pay exactly pro rata, nothing executes early or twice).
 - `cargo test --test sputnik_flow`, `cargo test --test swarm_scenario -- --nocapture`: sandbox tests with the real Sputnik DAO code, real proposals and votes, five separate agent processes.
 - GitHub Actions: `.github/workflows/ci.yml` runs the agent, page, contract and sandbox tests on every push; `watch.yml` runs verify.mjs against mainnet every hour; `guard.yml` keeps Ben's and Cara's agents watching vault2 around the clock.
