@@ -1,6 +1,6 @@
 # Dissent Finance
 
-Live page, read from mainnet in your browser: https://qijomofav35.github.io/Dissent-Finance/
+Live page, read from mainnet in your browser: https://qijomofav35.github.io/Dissent-Finance/ (v2; v1 at `?v=vault`)
 
 A vault for a group's money that sits next to an unchanged Sputnik DAO on NEAR. When the DAO approves a spend from the vault, the spend waits for a fixed window, and any member who did not vote for it can take their share out first. Each member can run an agent that does this for them, using a key that can only call `exit` and `cancel_spend`.
 
@@ -170,6 +170,46 @@ near contract call-function as-read-only vault.dissentfinance.near get_balances 
 ```
 
 Should show spend 0 as `Cancelled`, and a vault of 400000 USDC units (0.4 USDC) with 2 members.
+
+## On mainnet: v2
+
+`vault2.dissentfinance.near` runs the code described above, built reproducibly from commit `6057d0d` (code hash `5Pk3qkYpH61QQpzSVsHyBFqW1XhCYrQQvYirS7npeMuK`). It uses the same DAO, [dissentfinance.sputnik-dao.near](https://nearblocks.io/address/dissentfinance.sputnik-dao.near), and the same five members, who each joined with 0.1 NEAR and 0.2 USDC (Ben and Cara first took their 0.2 USDC out of v1 with their v1 agent keys: [A3N4hcUd](https://nearblocks.io/txns/A3N4hcUdexfttBQVedJvZ4ijMwwDiVzwMVJUVGNB3UVQ), [2tYQmA9P](https://nearblocks.io/txns/2tYQmA9PnBD9feRLbCxJy1QpbsNhrGCBmocNcUHSFCtt)).
+
+Before going live, v2 was reviewed three times by an independent reviewer that had not seen it being built. Each review found something (a storage loop through bouncing claims, a transfer check that could count a delivered payment as failed, agent retries that could drain a key's gas allowance, joins with no USDC behind them), and each was fixed and tested before the next step. The vault was deployed while it still had its key, so the last fix went in as a code-only redeploy ([GtacaTNB](https://nearblocks.io/txns/GtacaTNBVg2eD6Go7m8JPmTnuA4KM9CU7p2JjEpzf9Cx)) that kept every member's balance.
+
+The same story, live on 12 November 2026:
+
+| Step | Transaction |
+|---|---|
+| Ben files DAO proposal 1: 0.6 USDC of the vault's 1 USDC to himself | [7eE7dBmf](https://nearblocks.io/txns/7eE7dBmfC5piPPbAoSznGFA5x1hhr97e49k4WcH13v39) |
+| Ben approves | [5mdWtmMT](https://nearblocks.io/txns/5mdWtmMTFNvrfaciVcQSdpuNcS2xfBUWnnpAgNsrM9GS) |
+| Cara approves; the vault reads the proposal back and queues spend 0 | [DpKwEZ8L](https://nearblocks.io/txns/DpKwEZ8L419yKGqnxDrqrv5hQK4UJM7pYCVtEMbAYxwu) |
+| Alice's agent exits (60% of the fund, her limit is 20%) | [CGpp5bJe](https://nearblocks.io/txns/CGpp5bJe2ZB87QZTsnmvN4f28cQsjqS6yoPzzKsQKfKN) |
+| Dan's agent exits (Ben had never been paid by v2) | [Msq3yLLH](https://nearblocks.io/txns/Msq3yLLHyQQjYehLowCZJDhQB3u48gAPvhsZrtTkmdg) |
+| Emma's agent exits (Ben is on her blocked list) | [GqsAoKSZ](https://nearblocks.io/txns/GqsAoKSZsysmtKKA37Vq5vX3pbsFWgrRMgWkjVWfeTUa) |
+| Emma's agent cancels spend 0, now unaffordable | [4cA4kFtv](https://nearblocks.io/txns/4cA4kFtvvuz6bVb5FRjP35Q76sHQKq3hWsabd59xLAAT) |
+
+By the story script's clock the spend was cancelled 6 seconds after it was queued; the page shows the block times from the vault's own record. Alice, Dan and Emma each got exactly 0.2 USDC back, Ben got nothing, and 0.4 USDC stayed in the vault for Ben and Cara. The exit and cancel transactions above were written to `agent/mainnet/evidence.jsonl` by the story script from the agents' own state files, and the five notes are in `agent/mainnet/notes/vault2/`.
+
+Ben's v2 agent key was then used three ways it should never work, with `agent/mainnet/key-check.mjs`, which records only the runtime's own answer and retries busy RPC endpoints:
+
+| Attempt | NEAR runtime's answer |
+|---|---|
+| Move USDC (`ft_transfer` on the USDC contract) | `AccessKeyDepositWithFunctionCallActionError: Deposit is not allowed with function call` |
+| Call another vault method (`set_rules`) | `AccessKeyMethodNameMismatchActionError: Access key does not allow method set_rules` |
+| Attach a deposit to `exit` | `AccessKeyDepositWithFunctionCallActionError: Deposit is not allowed with function call` |
+
+(The story script's own attempt at the first check hit a rate-limited endpoint and recorded that error as a refusal. The evidence file keeps that line and marks it with a correction; the table above comes from `key-check.mjs`.)
+
+The same checks work for v2 without this repo's page:
+
+```
+near contract verify deployed-at vault2.dissentfinance.near network-config mainnet now
+near contract call-function as-read-only vault2.dissentfinance.near get_spend json-args '{"spend_id":0}' network-config mainnet now
+near contract call-function as-read-only vault2.dissentfinance.near get_balances json-args '{}' network-config mainnet now
+```
+
+v2 still has its full-access key while it is reviewed once more. Deleting it is the last step.
 
 ## Layout
 

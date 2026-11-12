@@ -107,9 +107,9 @@ near contract call-function as-read-only vault.dissentfinance.near get_record js
 // Two vaults run on mainnet. v1 ran the first live story and is keyless, with limits fixed in v2.
 const VAULTS = {
   vault: { id: "vault.dissentfinance.near", label: "v1", code: "3jWHECjP5BCezXDBPR1XuQzb62KpBYaKZzhMXbmoHtWN", notes: "notes" },
-  vault2: { id: "vault2.dissentfinance.near", label: "v2", code: null, notes: "notes/vault2" },
+  vault2: { id: "vault2.dissentfinance.near", label: "v2", code: "5Pk3qkYpH61QQpzSVsHyBFqW1XhCYrQQvYirS7npeMuK", notes: "notes/vault2" },
 };
-const PICK = new URLSearchParams(location.search).get("v") in VAULTS ? new URLSearchParams(location.search).get("v") : "vault";
+const PICK = new URLSearchParams(location.search).get("v") in VAULTS ? new URLSearchParams(location.search).get("v") : "vault2";
 const VAULT = VAULTS[PICK].id;
 const DAO = "dissentfinance.sputnik-dao.near";
 const USDC = "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
@@ -201,7 +201,9 @@ async function load() {
 
     // ---------- the vault ----------
     const nKeys = keys.keys.length;
-    $("keys").innerHTML = nKeys === 0 ? `<span class="ok">None.</span> Nobody can change the code or move funds outside its rules.` : `<span class="bad">${nKeys} key(s)</span>`;
+    $("keys").innerHTML = nKeys === 0
+      ? `<span class="ok">None.</span> Nobody can change the code or move funds outside its rules.`
+      : `<span class="bad">${nKeys} key(s) still on the account.</span> Until they are deleted, whoever holds them can change the code.`;
     const codeOk = VERIFIED_CODE !== null && account.code_hash === VERIFIED_CODE;
     const meta = await view(VAULT, "contract_source_metadata").catch(() => null);
     const link = meta?.link ? `<a href="${esc(meta.link)}">${esc(meta.link.split("/tree/")[1]?.slice(0, 7) ?? "source")}</a>` : "no source link";
@@ -281,8 +283,9 @@ async function load() {
     }));
     $("members").innerHTML = mrows.join("");
 
-    $("status").className = codeOk && nKeys === 0 && allMatch ? "ok" : "bad";
-    $("status").textContent = `${codeOk && nKeys === 0 && allMatch ? "Checked" : "Check failed"}: read from mainnet at ${new Date().toISOString().slice(11, 19)} UTC`;
+    const good = codeOk && allMatch;
+    $("status").className = good ? "ok" : "bad";
+    $("status").textContent = `${good ? "Checked: code hash and every note hash match" : "Check failed"}${nKeys ? `, ${nKeys} key(s) still on the vault` : ", vault has no keys"}. Read from mainnet at ${new Date().toISOString().slice(11, 19)} UTC`;
   } catch (e) {
     $("status").className = "bad";
     $("status").textContent = "Could not read mainnet";
