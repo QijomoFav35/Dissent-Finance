@@ -1,0 +1,27 @@
+{"at":"2026-11-11T19:28:51.585Z","step":"create_account","account":"alice.dissentfinance.near","tx":"ATvyR7HVb7p167AMeETgU5KCRdQf9GDenuZaCru1gwux"}
+{"at":"2026-11-11T19:29:06.273Z","step":"create_account","account":"ben.dissentfinance.near","tx":"2YHiqzsr5ekU7QLfy3EytNnutHLSnUUbKd9cNx7Xdjf6"}
+{"at":"2026-11-11T19:50:10.997Z","step":"create_account","account":"cara.dissentfinance.near","tx":"7SUqNNRGfK7EFFpPP77GR8BSAaT86qeV2KVYJdAhjKxc"}
+{"at":"2026-11-11T19:52:01.597Z","step":"create_account","account":"dan.dissentfinance.near","tx":"BYFLGNCbMCqBt3FGfN1PZqvz3xa9JJEPyAcbUJ8ykp1X"}
+{"at":"2026-11-11T19:52:13.149Z","step":"create_account","account":"emma.dissentfinance.near","tx":"2PXKa4S86435DCWdthjt65fP2j5MjooYD2dT9C7kC5fi"}
+{"at":"2026-11-11T19:52:23.199Z","step":"create_account","account":"vault.dissentfinance.near","tx":"4vNZaEARyhzRMFZ6SHV7DF33H9mBD6Tc9xRoRhT6syiW"}
+{"at":"2026-11-11T20:53:07.175Z","step":"deploy_vault","vault":"vault.dissentfinance.near","tx":"7mmzsa8Y3yCDvasPVhvbNcsEbhKFNk5CPNsUAEuuVSCn","wasm_bytes":270626}
+{"at":"2026-11-11T20:56:01.848Z","step":"join","account":"alice.dissentfinance.near","tx":"5mTnho1Q8xFujaq26hj6hAU7CLpuxx4CJT4AaWw7P3eL"}
+{"at":"2026-11-11T20:57:20.274Z","step":"set_rules","account":"alice.dissentfinance.near","rules":{"max_spend_share_bps":2000,"new_recipient":false,"blocked_recipients":[]},"tx":"GGv4VKAXp1a8byT9XzsqmtAqXyyZKCDUWyf8qZQQEw9K"}
+{"at":"2026-11-11T20:58:47.319Z","step":"join","account":"ben.dissentfinance.near","tx":"CN5odXEQm3mamSwoSWUg8EmY5LzuZfEovY3JXe59J4iH"}
+{"at":"2026-11-11T20:59:00.918Z","step":"set_rules","account":"ben.dissentfinance.near","rules":{"max_spend_share_bps":1000,"new_recipient":false,"blocked_recipients":[]},"tx":"6eqktjMN2SzUB9UQjnfSPacKxjp9pVTZh46ShVBiCYfv"}
+{"at":"2026-11-11T21:00:29.911Z","step":"join","account":"cara.dissentfinance.near","tx":"34GLkGkKqqE9MGbgp8L9nsCA6c8nAKw5NmYPHMntWt2E"}
+{"at":"2026-11-11T21:01:03.468Z","step":"set_rules","account":"cara.dissentfinance.near","rules":{"max_spend_share_bps":1000,"new_recipient":false,"blocked_recipients":[]},"tx":"4zoHHCaokyXzbknJvhsfF7WW7KwexLWGv4vnRSA97ARo"}
+{"at":"2026-11-11T21:02:25.577Z","step":"join","account":"dan.dissentfinance.near","tx":"GCH1q7qLsqYmCg8CuCjyaAanzJMVMqWu9w8dRwuMdjqY"}
+{"at":"2026-11-11T21:02:38.943Z","step":"set_rules","account":"dan.dissentfinance.near","rules":{"max_spend_share_bps":null,"new_recipient":true,"blocked_recipients":[]},"tx":"4RV69VbZH9KHSfW7emiroJAZZW6nPK8gGG8LyY8jdEY5"}
+{"at":"2026-11-11T21:03:06.222Z","step":"join","account":"emma.dissentfinance.near","tx":"HcFGLxfYYD7SHwwnknm2PAYkwercb54agMPXmSpobxBA"}
+{"at":"2026-11-11T21:03:10.652Z","step":"set_rules","account":"emma.dissentfinance.near","rules":{"max_spend_share_bps":null,"new_recipient":false,"blocked_recipients":["ben.dissentfinance.near"]},"tx":"FWQ2893YX2N3grUyJ9xhcSpy9JoJTqkpFKpAhkev6ZDZ"}
+{"at":"2026-11-11T21:03:12.794Z","step":"agent_key","account":"alice.dissentfinance.near","public_key":"ed25519:EGRW79stnEwPNHP1qXR9MU1HL9MLX9NThhqX1p47PcBf","tx":"FeWafD3eP8bHp8wRqJuATSADMGUjh1hJMqNavNd256Aj"}
+{"at":"2026-11-11T21:03:14.936Z","step":"agent_key","account":"ben.dissentfinance.near","public_key":"ed25519:HTjsVpjdkSnKayyUJzd1MCJq2ucWvpYJ8v1CHLWg6K25","tx":"FgQWA6XnSbqd8AaKjE9We8pkdxKRr7Kt7w9PiGcydDAL"}
+{"at":"2026-11-11T21:03:16.786Z","step":"agent_key","account":"cara.dissentfinance.near","public_key":"ed25519:4qioCZYhVFaS12LHFNPrDa85LBqLfi5vgDVpkTyQoDqn","tx":"EzdmizGKkQb4n7d2PhZJnMr2G1TMMR4s7DC6EzcSyYJN"}
+{"at":"2026-11-11T21:03:18.393Z","step":"agent_key","account":"dan.dissentfinance.near","public_key":"ed25519:Yc1hkTt9kGgfv84mi4WUEvcbzzXYFTKAncm7V3Peruc","tx":"ENSDfUTG63o7wu9CcAt6UUtGSTrtmxRxFSwJPQNa9qgk"}
+{"at":"2026-11-11T21:03:20.084Z","step":"agent_key","account":"emma.dissentfinance.near","public_key":"ed25519:CrqHiSDiNz4URdv93Ccz19MKZq6KfxTVVMxQgaGy8YNd","tx":"GuqvD7ysdS2r3rpvMRqhXcCiRDZw2ufW82Z875Emuw5k"}
+{"at":"2026-11-11T21:10:48.454Z","step":"propose","proposal_id":0,"amount":"600000","tx":"4uSodkrWsqQtq1Kpm15X11NQzj7k9h5ESJGXLHEegzSz"}
+{"at":"2026-11-11T21:10:53.205Z","step":"vote","voter":"ben.dissentfinance.near","proposal_id":0,"tx":"73sYDMhVWQo765hznkCdQzpubSVMgNUDbc98bH7855mj"}
+{"at":"2026-11-11T21:10:59.562Z","step":"vote","voter":"cara.dissentfinance.near","proposal_id":0,"tx":"HkBStJJAqLwADecEu5qnr5F8waPRXPSVzFamXHmJvzL7"}
+{"at":"2026-11-11T21:11:54.561Z","step":"settled","spend_id":0,"status":"Cancelled","seconds_after_queue":46.1}
+{"at":"2026-11-11T21:12:57.506Z","step":"agent_key_refused","account":"ben.dissentfinance.near","attempted":"17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1.ft_transfer","error":"Exceeded 4 providers to execute request"}

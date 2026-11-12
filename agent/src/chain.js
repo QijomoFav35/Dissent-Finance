@@ -4,27 +4,29 @@
 // and it cannot attach a deposit, so the worst a leaked key can do is make its owner leave with
 // their own money.
 
-import { Account, JsonRpcProvider, teraToGas } from "near-api-js";
+import { Account, FailoverRpcProvider, JsonRpcProvider, teraToGas } from "near-api-js";
 
 export const AGENT_METHODS = ["exit", "cancel_spend"];
 
 export class KeyCaller {
   /**
-   * @param {{ accountId: string, secretKey: string, rpcUrl: string, vaultId: string }} cfg
+   * @param {{ accountId: string, secretKey: string, rpcUrls: string[], vaultId: string }} cfg
    */
-  constructor({ accountId, secretKey, rpcUrl, vaultId }) {
+  constructor({ accountId, secretKey, rpcUrls, vaultId }) {
     if (!secretKey?.startsWith("ed25519:")) throw new Error(`no ed25519 key for ${accountId}`);
     this.vaultId = vaultId;
-    this.account = new Account(accountId, new JsonRpcProvider({ url: rpcUrl }), secretKey);
+    // If one endpoint fails, the same signed transaction goes to the next, so an exit is never sent twice.
+    const provider = new FailoverRpcProvider(rpcUrls.map((url) => new JsonRpcProvider({ url })));
+    this.account = new Account(accountId, provider, secretKey);
   }
 
-  async call(methodName, args) {
+  async call(methodName, args, tgas) {
     if (!AGENT_METHODS.includes(methodName)) throw new Error(`agent key cannot call ${methodName}`);
     const outcome = await this.account.callFunctionRaw({
       contractId: this.vaultId,
       methodName,
       args,
-      gas: teraToGas(100),
+      gas: teraToGas(tgas),
       deposit: 0n,
     });
     const hash = outcome?.transaction?.hash ?? outcome?.transaction_outcome?.id;
@@ -34,10 +36,11 @@ export class KeyCaller {
   }
 
   exit(reasonHash) {
-    return this.call("exit", { reason_hash: reasonHash });
+    // exit starts a NEAR transfer and a USDC transfer, each with a callback: 40 Tgas attached, plus its own work.
+    return this.call("exit", { reason_hash: reasonHash }, 80);
   }
 
   cancelSpend(spendId) {
-    return this.call("cancel_spend", { spend_id: spendId });
+    return this.call("cancel_spend", { spend_id: spendId }, 30);
   }
 }

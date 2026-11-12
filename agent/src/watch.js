@@ -46,7 +46,7 @@ const rpc = new Rpc(cfg.rpc);
 const members = mine.map((m) => {
   const secretKey = process.env[m.key_env];
   if (!secretKey) throw new Error(`set ${m.key_env} to ${m.account_id}'s function-call key`);
-  return { accountId: m.account_id, caller: new KeyCaller({ accountId: m.account_id, secretKey, rpcUrl: cfg.rpc[0], vaultId: cfg.vault }) };
+  return { accountId: m.account_id, caller: new KeyCaller({ accountId: m.account_id, secretKey, rpcUrls: cfg.rpc, vaultId: cfg.vault }) };
 });
 
 const agent = new ExitAgent({

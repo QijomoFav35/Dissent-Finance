@@ -39,7 +39,7 @@ export class Rpc {
       } catch (e) {
         if (e.contractError) throw e;
         lastError = e;
-        await sleep(300 * (attempt + 1));
+        await sleep(Math.min(500 * (attempt + 1), 4000));
       }
     }
     throw lastError;
