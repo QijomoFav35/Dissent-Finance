@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ExitAgent, MemoryStore, BACKOFF_MS, MAX_EXIT_ATTEMPTS } from "../src/agent.js";
+import { ExitAgent, MemoryStore, BACKOFF_MS, MAX_EXIT_ATTEMPTS, MAX_CANCEL_ATTEMPTS } from "../src/agent.js";
 import { hashNote } from "../src/note.js";
 import { FakeVault, USDC, NEAR } from "./fake-vault.js";
 
@@ -212,4 +212,20 @@ test("five separate agents, each with only its own key, reach the same outcome",
   // Nobody ever called with another member's key.
   for (const c of vault.calls) assert.ok(FIVE.includes(c.account));
   assert.deepEqual([...vault.holdings.keys()].sort(), ["ben.near", "cara.near", "emma.near"]);
+});
+
+test("a cancel that keeps failing backs off and stops after MAX_CANCEL_ATTEMPTS", async () => {
+  const vault = new FakeVault({ near: 1n, usdc: 100n, members: [["alice.near", 1n], ["ben.near", 1n]] });
+  vault.queue({ recipient: "ben.near", token: "Usdc", amount: 1000n, approvers: ["ben.near"] }); // unaffordable from the start
+  let t = 0;
+  const caller = { exit: async () => ({ ok: true }), cancelSpend: async () => { vault.calls.push({ method: "cancel_spend" }); throw new Error("RPC unavailable"); } };
+  const agent = new ExitAgent({ vaultId: "v", reader: vault, members: [{ accountId: "alice.near", caller }], store: new MemoryStore(), nowMs: () => t });
+  await agent.tick();
+  await agent.tick();
+  assert.equal(vault.calls.filter((c) => c.method === "cancel_spend").length, 1, "no second try before the backoff");
+  for (let i = 0; i < MAX_CANCEL_ATTEMPTS + 5; i++) {
+    t += 120_000;
+    await agent.tick();
+  }
+  assert.equal(vault.calls.filter((c) => c.method === "cancel_spend").length, MAX_CANCEL_ATTEMPTS);
 });

@@ -4,10 +4,10 @@
 //
 //   node mainnet/story.mjs
 
-import { Account, JsonRpcProvider, teraToGas } from "near-api-js";
 import fs from "node:fs";
 import path from "node:path";
-import { USDC, DAO, VAULT, VAULT_NAME, MEMBERS, member, PROPOSAL_BOND, RPCS, AGENT_KEYS, log, usdc, signerFor, view, call, record, explorer } from "./lib.mjs";
+import { tryWithKey } from "./key-check.mjs";
+import { USDC, DAO, VAULT, VAULT_NAME, MEMBERS, member, PROPOSAL_BOND, AGENT_KEYS, log, usdc, signerFor, view, call, record, explorer } from "./lib.mjs";
 
 async function main() {
   const open = await view(VAULT, "get_open_spends");
@@ -77,18 +77,14 @@ async function main() {
     log(`  ${m.padEnd(5)} ${shares === 0n ? "left  " : "stayed"} wallet USDC ${usdc(held)}`);
   }
 
-  // The agent key at work outside its two methods: the runtime refuses it before anything runs.
+  // The agent key at work outside its two methods: only a runtime refusal counts (see key-check.mjs).
   const key = JSON.parse(fs.readFileSync(path.join(AGENT_KEYS, `${ben}.json`), "utf8")).private_key;
-  // One endpoint only: a refusal is the answer we want to record, not a failure to retry elsewhere.
-  const agent = new Account(ben, new JsonRpcProvider({ url: RPCS[0] }), key);
-  try {
-    await agent.callFunctionRaw({ contractId: USDC, methodName: "ft_transfer", args: { receiver_id: member("cara"), amount: "1" }, deposit: 1n, gas: teraToGas(30) });
-    throw new Error("UNEXPECTED: the agent key moved USDC");
-  } catch (e) {
-    const msg = String(e?.message ?? e);
-    if (msg.startsWith("UNEXPECTED")) throw e;
-    log(`agent key refused on USDC ft_transfer, as it should be: ${msg.slice(0, 160)}`);
-    record("agent_key_refused", { account: ben, attempted: `${USDC}.ft_transfer`, error: msg.slice(0, 300) });
+  const r = await tryWithKey(ben, key, { contractId: USDC, methodName: "ft_transfer", args: { receiver_id: member("cara"), amount: "1" }, deposit: 1n });
+  if (r.refused) {
+    log(`agent key refused on USDC ft_transfer, as it should be: ${r.error.slice(0, 160)}`);
+    record("agent_key_refused", { account: ben, attempted: `${USDC}.ft_transfer`, error: r.error.slice(0, 300), endpoint: r.endpoint });
+  } else {
+    log(`agent key check not confirmed (${r.error ?? "the call went through"}); run node mainnet/key-check.mjs`);
   }
 }
 

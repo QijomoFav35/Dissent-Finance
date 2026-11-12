@@ -12,6 +12,8 @@ export const BACKOFF_MS = (attempt) => Math.min(60_000, 2_000 * 2 ** Math.max(0,
 // Each attempt can use up to 80 Tgas of the key's 0.25 NEAR allowance, so cap them well below the
 // roughly 30 the allowance would cover. With the backoff above, 20 attempts span about 15 minutes.
 export const MAX_EXIT_ATTEMPTS = 20;
+// Cancels draw on the same allowance (30 Tgas each), so they back off and stop too.
+export const MAX_CANCEL_ATTEMPTS = 10;
 // Contract answers to cancel_spend that mean another member's agent already settled the spend.
 // ERR_SPEND_AFFORDABLE is not here: it means the agent's read was stale, so it tries again next pass.
 const SETTLED = /ERR_ALREADY_EXECUTED|ERR_SPEND_CANCELLED/;
@@ -62,6 +64,8 @@ export class ExitAgent {
         if (!unaffordable(spend, balances)) continue;
         const key = `cancel:${spend.id}`;
         if (this.store.has(key)) continue;
+        const tries = this.store.get(`cancel_try:${spend.id}`) ?? { attempts: 0, retry_at: 0 };
+        if (tries.attempts >= MAX_CANCEL_ATTEMPTS || this.nowMs() < tries.retry_at) continue;
         const caller = this.members[0]?.caller;
         if (!caller) continue;
         try {
@@ -83,6 +87,8 @@ export class ExitAgent {
             this.store.put(key, { tx: null, at: this.now(), by: "another member" });
             continue;
           }
+          const attempts = tries.attempts + 1;
+          this.store.put(`cancel_try:${spend.id}`, { attempts, retry_at: this.nowMs() + BACKOFF_MS(attempts), error: msg });
           done.errors.push({ spend: spend.id, action: "cancel", error: msg });
         }
       }
