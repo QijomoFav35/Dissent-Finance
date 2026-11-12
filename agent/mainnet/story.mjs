@@ -4,10 +4,10 @@
 //
 //   node mainnet/story.mjs
 
-import { Account, teraToGas } from "near-api-js";
+import { Account, JsonRpcProvider, teraToGas } from "near-api-js";
 import fs from "node:fs";
 import path from "node:path";
-import { USDC, DAO, VAULT, MEMBERS, member, PROPOSAL_BOND, provider, AGENT_KEYS, log, usdc, signerFor, view, call, record, explorer } from "./lib.mjs";
+import { USDC, DAO, VAULT, MEMBERS, member, PROPOSAL_BOND, RPCS, AGENT_KEYS, log, usdc, signerFor, view, call, record, explorer } from "./lib.mjs";
 
 async function main() {
   const open = await view(VAULT, "get_open_spends");
@@ -65,7 +65,8 @@ async function main() {
 
   // The agent key at work outside its two methods: the runtime refuses it before anything runs.
   const key = JSON.parse(fs.readFileSync(path.join(AGENT_KEYS, `${ben}.json`), "utf8")).private_key;
-  const agent = new Account(ben, provider, key);
+  // One endpoint only: a refusal is the answer we want to record, not a failure to retry elsewhere.
+  const agent = new Account(ben, new JsonRpcProvider({ url: RPCS[0] }), key);
   try {
     await agent.callFunctionRaw({ contractId: USDC, methodName: "ft_transfer", args: { receiver_id: member("cara"), amount: "1" }, deposit: 1n, gas: teraToGas(30) });
     throw new Error("UNEXPECTED: the agent key moved USDC");

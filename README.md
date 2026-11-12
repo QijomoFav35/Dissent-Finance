@@ -100,7 +100,56 @@ Limits of this replay: the fund size is assumed, shares are assumed equal, one D
 
 ## On mainnet
 
-Filled in after the live run: the DAO, the vault, the transaction hashes for a join, a spend, the exits, the cancel and an attempt with the agent key that the runtime refused, plus the full-access key deletion that leaves the vault with no keys.
+The story ran live on NEAR mainnet on 11 November 2026, scaled down: each member put in 0.1 NEAR and 0.2 USDC (native USDC, `17208628...133a1`), so the vault held 0.5 NEAR and 1 USDC.
+
+| What | Where |
+|---|---|
+| The DAO, created through the official `sputnik-dao.near` factory, council of the five members, 2 approvals needed | [dissentfinance.sputnik-dao.near](https://nearblocks.io/address/dissentfinance.sputnik-dao.near) |
+| The vault, verified and with no access keys | [vault.dissentfinance.near](https://nearblocks.io/address/vault.dissentfinance.near) |
+| Members | `alice`, `ben`, `cara`, `dan` and `emma`, each `.dissentfinance.near` |
+
+What happened (the three exits landed before the cancel; the contract refuses a cancel while the spend is still affordable):
+
+| Step | Transaction |
+|---|---|
+| Ben files proposal 0: 0.6 USDC of the vault's 1 USDC to himself | [4uSodkrW](https://nearblocks.io/txns/4uSodkrWsqQtq1Kpm15X11NQzj7k9h5ESJGXLHEegzSz) |
+| Ben approves | [73sYDMhV](https://nearblocks.io/txns/73sYDMhVWQo765hznkCdQzpubSVMgNUDbc98bH7855mj) |
+| Cara approves; the DAO calls the vault, which reads the proposal back and queues spend 0 | [HkBStJJA](https://nearblocks.io/txns/HkBStJJAqLwADecEu5qnr5F8waPRXPSVzFamXHmJvzL7) |
+| Emma's agent exits (Ben is on her blocked list) | [E44VWZe5](https://nearblocks.io/txns/E44VWZe5r6wozitagvX9tauLKw6JzmFgUBwGCgTJ7Yii) |
+| Dan's agent exits (Ben had never been paid by the vault) | [6uKtFnYV](https://nearblocks.io/txns/6uKtFnYVcH9T3UNGZQm45rnHQGZ1SbXxBJb2jXzjTsmP) |
+| Alice's agent exits (the spend was 60% of the fund, her limit is 20%) | [7GZAggTS](https://nearblocks.io/txns/7GZAggTS73tcV3ygJT3hzmzWWBrFwgFnVBGXd9GY1RRF) |
+| Cara's agent cancels spend 0, now unaffordable | [EdWntKHf](https://nearblocks.io/txns/EdWntKHfbXwLudqv9ZNMbyEnquCPvpCMVNTVz9knPXvh) |
+
+Nobody acted by hand after Cara's vote. The spend was cancelled 46 seconds after it was queued; most of that time went on the public RPC endpoints rate-limiting the five agents. Afterwards Alice, Dan and Emma each held exactly 0.2 USDC, Ben held none, and the vault held 0.4 USDC and 0.2 NEAR for Ben and Cara. Ben and Cara's agents wrote notes saying stay, since they approved. All five notes are in `agent/mainnet/notes/`, and each exit carries its note's hash on chain.
+
+Ben's agent key was then used to try a USDC `ft_transfer`. The NEAR runtime rejected the transaction before it ran, with `Deposit is not allowed with function call`: a token transfer needs 1 yoctoNEAR attached, and these keys can't attach any, so they can't move tokens at all.
+
+The vault code was then redeployed from a reproducible build of commit `54ccf1b` ([GMcCtwT8](https://nearblocks.io/txns/GMcCtwT8VLZxbKqs2zhDA3m8BX5N7NSNtLEh25oZcz7a)), and its only access key was deleted ([61N8fiHX](https://nearblocks.io/txns/61N8fiHXookvRa6jv7Meo1MUPKSAdLjzX39YjPWE9n5W)). From then on nobody can change its code or move its funds outside the contract's rules. About 2.7 NEAR stays locked in it for its own storage.
+
+Every transaction from setup, including the joins, the rules and the five agent keys, is in `agent/mainnet/evidence.jsonl`.
+
+### Check it yourself
+
+With `near` CLI installed, none of these need an account:
+
+```
+near contract verify deployed-at vault.dissentfinance.near network-config mainnet now
+```
+
+This rebuilds the vault from the commit it names, in the Docker image it names, and should end with `The code obtained from the contract account ID and the code calculated from the repository are the same.` (needs Docker, about 5 minutes).
+
+```
+near account view-account-summary vault.dissentfinance.near network-config mainnet now
+```
+
+Should show `Account is locked (no access keys)`.
+
+```
+near contract call-function as-read-only vault.dissentfinance.near get_spend json-args '{"spend_id":0}' network-config mainnet now
+near contract call-function as-read-only vault.dissentfinance.near get_balances json-args '{}' network-config mainnet now
+```
+
+Should show spend 0 as `Cancelled`, and a vault of 400000 USDC units (0.4 USDC) with 2 members.
 
 ## Layout
 
