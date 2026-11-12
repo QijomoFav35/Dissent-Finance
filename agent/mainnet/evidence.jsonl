@@ -29,3 +29,5 @@
 {"at":"2026-11-12T05:50:00Z","step":"exits_and_cancel","emma_exit":"E44VWZe5r6wozitagvX9tauLKw6JzmFgUBwGCgTJ7Yii","dan_exit":"6uKtFnYVcH9T3UNGZQm45rnHQGZ1SbXxBJb2jXzjTsmP","alice_exit":"7GZAggTS73tcV3ygJT3hzmzWWBrFwgFnVBGXd9GY1RRF","cara_cancel":"EdWntKHfbXwLudqv9ZNMbyEnquCPvpCMVNTVz9knPXvh","source":"the agents' own logs"}
 {"at":"2026-11-12T05:50:00Z","step":"redeploy_verified","tx":"GMcCtwT8VLZxbKqs2zhDA3m8BX5N7NSNtLEh25oZcz7a","code_hash":"3jWHECjP5BCezXDBPR1XuQzb62KpBYaKZzhMXbmoHtWN","commit":"54ccf1b24c629e86ba1cb5d87b9ac80f3eb64f39"}
 {"at":"2026-11-12T06:00:00Z","step":"delete_vault_key","tx":"61N8fiHXookvRa6jv7Meo1MUPKSAdLjzX39YjPWE9n5W","public_key":"ed25519:CcTZhE34MwqDCViM315o1GEFfcNCSLHHnGFXYw5WM5g9"}
+{"at":"2026-11-12T08:41:24.930Z","step":"v1_exit","vault":"vault.dissentfinance.near","account":"ben.dissentfinance.near","tx":"A3N4hcUdexfttBQVedJvZ4ijMwwDiVzwMVJUVGNB3UVQ","usdc":"200000"}
+{"at":"2026-11-12T08:41:55.634Z","step":"v1_exit","vault":"vault.dissentfinance.near","account":"cara.dissentfinance.near","tx":"2tYQmA9PnBD9feRLbCxJy1QpbsNhrGCBmocNcUHSFCtt","usdc":"200000"}

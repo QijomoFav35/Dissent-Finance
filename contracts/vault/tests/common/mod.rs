@@ -191,11 +191,11 @@ impl World {
             "ft_transfer_call",
             json!({ "receiver_id": self.vault.account_id(), "amount": U128(usdc), "msg": "join" }),
             1,
-            100,
+            60,
         )
         .await?
         .assert_success();
-        self.call(&who, &self.vault, "join", json!({}), near * 10u128.pow(24), 150).await?.assert_success();
+        self.call(&who, &self.vault, "join", json!({}), near * 10u128.pow(24), 100).await?.assert_success();
         Ok(())
     }
 
@@ -225,7 +225,7 @@ impl World {
                 "method_name": "queue_spend",
                 "args": STANDARD.encode(args),
                 "deposit": "0",
-                "gas": "150000000000000"
+                "gas": "60000000000000"
             }]
         }})
     }
@@ -258,7 +258,7 @@ impl World {
             "act_proposal",
             json!({ "id": proposal_id, "action": action, "proposal": kind }),
             0,
-            300,
+            120,
         )
         .await?
         .assert_success();

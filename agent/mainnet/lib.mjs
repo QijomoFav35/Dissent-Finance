@@ -7,7 +7,7 @@ import { Account, FailoverRpcProvider, JsonRpcProvider, KeyPair, teraToGas } fro
 import { Rpc } from "../src/rpc.js";
 
 export const ROOT = process.env.DISSENT_ROOT || "dissentfinance.near";
-export const RPCS = (process.env.DISSENT_RPC || "https://rpc.intea.rs,https://near.blockpi.network/v1/rpc/public,https://free.rpc.fastnear.com").split(",");
+export const RPCS = (process.env.DISSENT_RPC || "https://free.rpc.fastnear.com,https://near.drpc.org,https://rpc.mainnet.near.org,https://rpc.intea.rs").split(",");
 export const USDC = "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1"; // native USDC on NEAR
 export const FACTORY = "sputnik-dao.near";
 export const DAO_NAME = process.env.DISSENT_DAO_NAME || "dissentfinance";
@@ -93,7 +93,8 @@ export const explorer = (hash) => `https://nearblocks.io/txns/${hash}`;
 /** Appends one line to evidence.jsonl next to the scripts, for the README's mainnet section. */
 export function record(step, data) {
   const file = new URL("./evidence.jsonl", import.meta.url);
-  fs.appendFileSync(file, JSON.stringify({ at: new Date().toISOString(), step, ...data }) + "\n");
+  // Every line names the vault it belongs to, so v1's and v2's evidence never mix.
+  fs.appendFileSync(file, JSON.stringify({ at: new Date().toISOString(), step, vault: VAULT, ...data }) + "\n");
 }
 
 export function policy() {

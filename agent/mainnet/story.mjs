@@ -7,7 +7,7 @@
 import { Account, JsonRpcProvider, teraToGas } from "near-api-js";
 import fs from "node:fs";
 import path from "node:path";
-import { USDC, DAO, VAULT, MEMBERS, member, PROPOSAL_BOND, RPCS, AGENT_KEYS, log, usdc, signerFor, view, call, record, explorer } from "./lib.mjs";
+import { USDC, DAO, VAULT, VAULT_NAME, MEMBERS, member, PROPOSAL_BOND, RPCS, AGENT_KEYS, log, usdc, signerFor, view, call, record, explorer } from "./lib.mjs";
 
 async function main() {
   const open = await view(VAULT, "get_open_spends");
@@ -52,6 +52,20 @@ async function main() {
     }
     if (Date.now() - started > 15 * 60_000) throw new Error("nothing happened in 15 minutes: are the agents running?");
     await new Promise((r) => setTimeout(r, 2000));
+  }
+
+  // Record each agent's exit and cancel transaction from the agents' own state files, so the evidence
+  // comes from what the agents did rather than being written in by hand.
+  const here = path.dirname(new URL(import.meta.url).pathname);
+  const notesDir = VAULT_NAME === "vault" ? path.join(here, "notes") : path.join(here, "notes", VAULT_NAME);
+  for (const m of MEMBERS) {
+    const file = path.join(notesDir, `state-${member(m)}.json`);
+    if (!fs.existsSync(file)) continue;
+    const state = JSON.parse(fs.readFileSync(file, "utf8"));
+    const d = state[`decision:${spend.id}:${member(m)}`];
+    if (d?.decision === "exit" && d.tx) record("exit", { spend_id: spend.id, account: member(m), tx: d.tx, note_hash: d.hash, source: "agent state file" });
+    const c = state[`cancel:${spend.id}`];
+    if (c?.tx) record("cancel", { spend_id: spend.id, by: member(m), tx: c.tx, source: "agent state file" });
   }
 
   const after = await view(VAULT, "get_balances");

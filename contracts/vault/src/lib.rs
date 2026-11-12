@@ -494,12 +494,16 @@ impl Vault {
         require!(amount > 0, ERR_NOTHING_TO_CLAIM);
         self.tally_mut(token).claimable -= amount;
         self.send(account.clone(), token, amount, None);
-        self.emit("claim", json!({ "account_id": account, "token": token, "amount": U128(amount) }));
+        // Log only: a claim that bounces comes straight back as claimable, so storing these would let
+        // anyone grow the vault's record in a loop.
+        self.log_only("claim", json!({ "account_id": account, "token": token, "amount": U128(amount) }));
     }
 
     #[private]
     pub fn on_transfer(&mut self, account_id: AccountId, token: Token, amount: U128, payment: bool) {
-        let ok = matches!(env::promise_result_checked(0, 64), Ok(_));
+        // Success is judged on the transfer's outcome alone. A long return value is still a success:
+        // treating it as a failure would credit an amount that was already delivered.
+        let ok = !matches!(env::promise_result_checked(0, 0), Err(PromiseError::Failed));
         self.settle_payment(account_id, token, amount.0, ok, payment);
     }
 
@@ -785,7 +789,7 @@ impl Vault {
         };
         let prev = map.get(&account).copied().unwrap_or(0);
         map.insert(account.clone(), prev + amount);
-        self.emit("claimable", json!({ "account_id": account, "token": token, "amount": U128(amount) }));
+        self.log_only("claimable", json!({ "account_id": account, "token": token, "amount": U128(amount) }));
     }
 
     /// True when the account can pay for its storage, plus the reserve kept for exits and cancels,

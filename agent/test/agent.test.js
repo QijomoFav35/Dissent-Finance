@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ExitAgent, MemoryStore } from "../src/agent.js";
+import { ExitAgent, MemoryStore, BACKOFF_MS } from "../src/agent.js";
 import { hashNote } from "../src/note.js";
 import { FakeVault, USDC, NEAR } from "./fake-vault.js";
 
@@ -80,43 +80,50 @@ test("only the member whose rule is broken leaves", async () => {
   assert.equal(r.cancelled.length, 0, "400 USDC still covers 125");
 });
 
-test("an exit that fails keeps being retried, with the same note, until the window closes", async () => {
+test("an exit that fails is retried with the same note, backing off, for as long as the spend is open", async () => {
   const vault = new FakeVault({ near: 10n * NEAR, usdc: 100n * USDC, members: [["alice.near", 1n], ["ben.near", 1n]] });
   vault.rulesOf.set("alice.near", { max_spend_share_bps: 1 });
-  vault.queue({ recipient: "ben.near", token: "Usdc", amount: 10n * USDC, approvers: ["ben.near"] });
+  const id = vault.queue({ recipient: "ben.near", token: "Usdc", amount: 10n * USDC, approvers: ["ben.near"] });
   const notes = [];
-  let clock = 1n; // the fake spend's window ends at 600 s
+  let clock = 0;
   const agent = new ExitAgent({
     vaultId: "vault.near",
     reader: vault,
-    members: [{ accountId: "alice.near", caller: vault.callerFor("alice.near", { failTimes: 5 }) }],
+    members: [{ accountId: "alice.near", caller: vault.callerFor("alice.near", { failTimes: 3 }) }],
     store: new MemoryStore(),
     publish: (note, hash) => notes.push(hash),
-    nowNs: () => clock,
+    nowMs: () => clock,
   });
-  for (let i = 0; i < 5; i++) assert.equal((await agent.tick()).errors.length, 1);
+  const exits = () => vault.calls.filter((c) => c.method === "exit").length;
+  await agent.tick();
+  assert.equal(exits(), 1);
+  await agent.tick();
+  assert.equal(exits(), 1, "no new attempt before the backoff has passed");
+  clock += BACKOFF_MS(1);
+  await agent.tick();
+  assert.equal(exits(), 2);
+  clock += BACKOFF_MS(2);
+  await agent.tick();
+  assert.equal(exits(), 3);
+  clock += BACKOFF_MS(3);
   const r = await agent.tick();
-  assert.equal(r.exited.length, 1, "sixth attempt lands");
+  assert.equal(r.exited.length, 1, "fourth attempt lands");
   assert.equal(notes.length, 1, "the note was published once");
-  const hashes = new Set(vault.calls.filter((c) => c.method === "exit").map((c) => c.reasonHash));
-  assert.deepEqual([...hashes], notes, "every attempt carried the published hash");
+  assert.deepEqual([...new Set(vault.calls.filter((c) => c.method === "exit").map((c) => c.reasonHash))], notes);
+  assert.ok(BACKOFF_MS(20) <= 60_000, "backoff is capped at a minute");
 
-  const stuck = new FakeVault({ near: 1n, usdc: 100n, members: [["alice.near", 1n], ["ben.near", 1n]] });
-  stuck.rulesOf.set("alice.near", { max_spend_share_bps: 1 });
-  stuck.queue({ recipient: "ben.near", token: "Usdc", amount: 10n, approvers: ["ben.near"] });
-  let t = 1n;
-  const a2 = new ExitAgent({
-    vaultId: "v",
-    reader: stuck,
-    members: [{ accountId: "alice.near", caller: stuck.callerFor("alice.near", { failTimes: 99 }) }],
-    store: new MemoryStore(),
-    nowNs: () => t,
-  });
-  for (let i = 0; i < 4; i++) await a2.tick();
-  t = 600_000_000_001n; // past window_ends
+  // Once the spend is no longer open, the agent stops trying.
+  const v2 = new FakeVault({ near: 1n, usdc: 100n, members: [["alice.near", 1n], ["ben.near", 1n]] });
+  v2.rulesOf.set("alice.near", { max_spend_share_bps: 1 });
+  const id2 = v2.queue({ recipient: "ben.near", token: "Usdc", amount: 10n, approvers: ["ben.near"] });
+  let t = 0;
+  const a2 = new ExitAgent({ vaultId: "v", reader: v2, members: [{ accountId: "alice.near", caller: v2.callerFor("alice.near", { failTimes: 99 }) }], store: new MemoryStore(), nowMs: () => t });
   await a2.tick();
+  v2.spends[id2].status = "Executed";
+  t += 10 * 60_000;
   await a2.tick();
-  assert.equal(stuck.calls.filter((c) => c.method === "exit").length, 4, "no attempts after the window closed");
+  assert.equal(v2.calls.filter((c) => c.method === "exit").length, 1, "no attempts once the spend left the open list");
+  assert.ok(id >= 0);
 });
 
 test("a member with no shares is skipped", async () => {

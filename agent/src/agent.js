@@ -4,11 +4,13 @@
 import { evaluate, unaffordable } from "./rules.js";
 import { hashNote, makeNote } from "./note.js";
 
-// An exit that fails is retried on every pass until the spend's window closes: giving up early
-// would hand the spend to the approvers. The note is written once and its hash reused, so the
-// published note always matches whatever exit lands.
+// An exit that fails is retried for as long as the spend is open (the vault lists it until it is
+// executed or cancelled, and an exit still helps after the window if nobody has executed it yet).
+// Retries back off, so a stuck RPC can't burn the key's gas allowance. The note is written once and
+// its hash reused, so the published note always matches whatever exit lands.
+export const BACKOFF_MS = (attempt) => Math.min(60_000, 2_000 * 2 ** Math.max(0, attempt - 1));
 // Contract answers to cancel_spend that mean another member's agent already settled the spend.
-const SETTLED = /ERR_ALREADY_EXECUTED|ERR_SPEND_AFFORDABLE/;
+const SETTLED = /ERR_ALREADY_EXECUTED|ERR_SPEND_CANCELLED|ERR_SPEND_AFFORDABLE/;
 
 export class ExitAgent {
   /**
@@ -20,7 +22,7 @@ export class ExitAgent {
    *   store: { has(key: string): boolean, get(key: string): any, put(key: string, value: any): void },
    *   publish?: (note: any, hash: string) => Promise<void> | void,
    *   now?: () => string,
-   *   nowNs?: () => bigint,
+   *   nowMs?: () => number,
    *   log?: (line: string) => void,
    * }} deps
    */
@@ -31,7 +33,7 @@ export class ExitAgent {
     this.store = deps.store;
     this.publish = deps.publish ?? (() => {});
     this.now = deps.now ?? (() => new Date().toISOString());
-    this.nowNs = deps.nowNs ?? (() => BigInt(Date.now()) * 1_000_000n);
+    this.nowMs = deps.nowMs ?? (() => Date.now());
     this.log = deps.log ?? (() => {});
   }
 
@@ -90,12 +92,8 @@ export class ExitAgent {
     if (prior?.final) return;
 
     if (prior?.decision === "exit") {
-      // Already decided and published: retry the same exit with the same hash until the window closes.
-      if (this.nowNs() >= BigInt(spend.window_ends)) {
-        this.store.put(key, { ...prior, final: true, gave_up: "window closed" });
-        this.log(`${member.accountId}: window for spend ${spend.id} closed before an exit landed`);
-        return;
-      }
+      // Already decided and published: retry the same exit, with the same hash, once the backoff has passed.
+      if (prior.retry_at && this.nowMs() < prior.retry_at) return;
       return this.tryExit(spend, member, key, prior, done);
     }
 
@@ -138,7 +136,7 @@ export class ExitAgent {
       const error = String(e?.message ?? e);
       // No shares left: an earlier attempt already landed, or the member left by hand. Nothing to retry.
       const final = /ERR_NO_SHARES/.test(error);
-      this.store.put(key, { ...decision, final, attempts, error });
+      this.store.put(key, { ...decision, final, attempts, error, retry_at: this.nowMs() + BACKOFF_MS(attempts) });
       throw e;
     }
   }
@@ -159,7 +157,10 @@ export class FileStore {
   }
   put(key, value) {
     this.data[key] = value;
-    this.fs.writeFileSync(this.path, JSON.stringify(this.data, null, 2));
+    // Write then rename, so a crash mid-write never leaves a half-written state file.
+    const tmp = `${this.path}.tmp`;
+    this.fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2));
+    this.fs.renameSync(tmp, this.path);
   }
 }
 

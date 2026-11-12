@@ -10,11 +10,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { actions, KeyPair, teraToGas } from "near-api-js";
+import { actions, baseEncode, KeyPair, teraToGas } from "near-api-js";
+import crypto from "node:crypto";
 import {
   ROOT, USDC, FACTORY, DAO_NAME, DAO, VAULT, VAULT_NAME, MEMBERS, member, NEAR, milli, USDC_STORAGE, AGENT_KEYS,
-  log, near, usdc, signerFor, newKeyFile, exists, balance, view, call, record, explorer, policy, rulesFor,
+  log, near, usdc, signerFor, newKeyFile, exists, balance, view, call, record, explorer, policy, rulesFor, rpc,
 } from "./lib.mjs";
+const rpcQuery = (p) => rpc.query(p);
 
 const GO = process.argv.includes("--go");
 const WASM = path.resolve(new URL("../../contracts/vault/target/near/vault.wasm", import.meta.url).pathname);
@@ -31,6 +33,11 @@ async function main() {
   // ---------- preflight ----------
   if (!fs.existsSync(WASM)) throw new Error(`build the vault first: missing ${WASM}`);
   const code = fs.readFileSync(WASM);
+  // Only a build whose hash you name gets deployed: run `cargo near build reproducible-wasm` on a
+  // pushed commit and pass the bs58 checksum it prints.
+  const codeHash = baseEncode(crypto.createHash("sha256").update(code).digest());
+  const expected = process.argv.includes("--code-hash") ? process.argv[process.argv.indexOf("--code-hash") + 1] : null;
+  if (expected !== codeHash) throw new Error(`the wasm at ${WASM} hashes to ${codeHash}; pass --code-hash ${codeHash} if that is the reproducible build you mean to deploy`);
   const vaultFund = BigInt(code.length) * STORAGE_PER_BYTE + milli(250); // code storage, the reserve for exits, and room for its state
   const root = signerFor(ROOT);
   const rootBal = await balance(ROOT);
@@ -39,6 +46,12 @@ async function main() {
   const plan = [];
   for (const m of MEMBERS) if (!(await exists(member(m)))) plan.push([`create ${member(m)}`, FUND_MEMBER]);
   if (!(await exists(VAULT))) plan.push([`create ${VAULT} (code is ${code.length} bytes)`, vaultFund]);
+  else {
+    // The vault exists but has no code yet (an earlier run stopped): top it up if it needs more for this code.
+    const vs = await balance(VAULT);
+    const want = BigInt(code.length) * STORAGE_PER_BYTE + milli(250);
+    if (/^1{32}$/.test(vs.code) && vs.amount < want) plan.push([`top up ${VAULT} for its code`, want - vs.amount]);
+  }
   if (!(await exists(DAO))) plan.push([`create ${DAO} through ${FACTORY}`, DAO_DEPOSIT]);
   let topUps = 0n;
   for (const m of MEMBERS) {
@@ -69,6 +82,7 @@ async function main() {
   log(`  needs about ${near(needNear)} NEAR in total, plus gas`);
   if (!alreadyIn) log(`  each member joins with ${usdc(perMember)} USDC and ${near(JOIN_NEAR)} NEAR; ${ROOT} covers ${usdc(usdcShortfall)} USDC they are missing`);
   log(`  spend window: ${WINDOW_SEC} seconds`);
+  log(`  code to deploy: ${codeHash} (${code.length} bytes)`);
   if (rootBal.amount < peak) throw new Error(`not enough NEAR on ${ROOT} for the DAO call: has ${near(rootBal.amount)}, needs ${near(peak)} free while it runs`);
   if (rootBal.amount < needNear) throw new Error(`not enough NEAR on ${ROOT}: has ${near(rootBal.amount)}, needs about ${near(needNear)}`);
   if (!alreadyIn && rootUsdc < usdcShortfall) throw new Error(`not enough USDC on ${ROOT}: has ${usdc(rootUsdc)}, members are short ${usdc(usdcShortfall)}`);
@@ -100,7 +114,19 @@ async function main() {
   if (!MEMBERS.every((m) => council.includes(member(m)))) throw new Error(`${DAO} council is not the five members: ${JSON.stringify(council)}`);
 
   // ---------- the vault ----------
-  const vaultState = await balance(VAULT);
+  let vaultState = await balance(VAULT);
+  if (/^1{32}$/.test(vaultState.code) && vaultState.amount < BigInt(code.length) * STORAGE_PER_BYTE + milli(250)) {
+    const need = BigInt(code.length) * STORAGE_PER_BYTE + milli(250) - vaultState.amount;
+    const hash = await call(root, VAULT, "__transfer__", null, { deposit: need });
+    log(`topped up ${VAULT} by ${near(need)} NEAR ${explorer(hash)}`);
+    vaultState = await balance(VAULT);
+  }
+  if (!/^1{32}$/.test(vaultState.code) && vaultState.code !== codeHash) {
+    // Same vault, new build (only possible while the vault still has its key): redeploy the code, keep the state.
+    const out = await signerFor(VAULT).signAndSendTransaction({ receiverId: VAULT, actions: [actions.deployContract(code)] });
+    log(`redeployed ${VAULT} with ${codeHash} ${explorer(out?.transaction?.hash)}`);
+    record("redeploy_vault", { tx: out?.transaction?.hash, code_hash: codeHash, wasm_bytes: code.length });
+  }
   if (/^1{32}$/.test(vaultState.code)) {
     const vault = signerFor(VAULT);
     const out = await vault.signAndSendTransaction({
@@ -111,7 +137,7 @@ async function main() {
       ],
     });
     log(`deployed the vault ${explorer(out?.transaction?.hash)}`);
-    record("deploy_vault", { vault: VAULT, tx: out?.transaction?.hash, wasm_bytes: code.length });
+    record("deploy_vault", { tx: out?.transaction?.hash, code_hash: codeHash, wasm_bytes: code.length });
   }
   const config = await view(VAULT, "get_config");
   if (config.dao !== DAO || config.usdc !== USDC) throw new Error(`vault config is not what we expect: ${JSON.stringify(config)}`);
@@ -170,6 +196,14 @@ async function main() {
       fs.writeFileSync(file, JSON.stringify(saved), { mode: 0o600 });
     }
     if (!saved.added) {
+      // If an earlier run added the key but lost the reply, the key is already on chain: just record that.
+      const onChain = await rpcKeyExists(id, saved.public_key);
+      if (onChain) {
+        saved.added = true;
+        fs.writeFileSync(file, JSON.stringify(saved), { mode: 0o600 });
+        log(`${id}'s agent key was already on chain`);
+        continue;
+      }
       const out = await signerFor(id).addFunctionCallAccessKey({ publicKey: saved.public_key, contractId: VAULT, methodNames: ["exit", "cancel_spend"], allowance: milli(250) });
       saved.added = true;
       fs.writeFileSync(file, JSON.stringify(saved), { mode: 0o600 });
@@ -180,6 +214,16 @@ async function main() {
 
   const b = await view(VAULT, "get_balances");
   log(`done. vault holds ${near(b.near)} NEAR and ${usdc(b.usdc)} USDC for ${b.members} members`);
+}
+
+async function rpcKeyExists(accountId, publicKey) {
+  try {
+    await rpcQuery({ request_type: "view_access_key", account_id: accountId, public_key: publicKey });
+    return true;
+  } catch (e) {
+    if (/does not exist|UNKNOWN_ACCESS_KEY|access key/i.test(String(e?.message ?? e))) return false;
+    throw e;
+  }
 }
 
 async function alreadyJoined() {

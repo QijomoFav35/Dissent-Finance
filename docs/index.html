@@ -67,6 +67,7 @@
   <div class="bar">
     <span id="status" class="pending">Reading mainnet…</span>
     <button id="reload" type="button">Read again</button>
+    <span id="switch"></span>
     <span>Source: <a href="https://github.com/QijomoFav35/Dissent-Finance">github.com/QijomoFav35/Dissent-Finance</a></span>
   </div>
   <div id="error" class="panel bad"></div>
@@ -103,10 +104,16 @@ near contract call-function as-read-only vault.dissentfinance.near get_record js
 </main>
 
 <script>
-const VAULT = "vault.dissentfinance.near";
+// Two vaults run on mainnet. v1 ran the first live story and is keyless, with limits fixed in v2.
+const VAULTS = {
+  vault: { id: "vault.dissentfinance.near", label: "v1", code: "3jWHECjP5BCezXDBPR1XuQzb62KpBYaKZzhMXbmoHtWN", notes: "notes" },
+  vault2: { id: "vault2.dissentfinance.near", label: "v2", code: null, notes: "notes/vault2" },
+};
+const PICK = new URLSearchParams(location.search).get("v") in VAULTS ? new URLSearchParams(location.search).get("v") : "vault";
+const VAULT = VAULTS[PICK].id;
 const DAO = "dissentfinance.sputnik-dao.near";
 const USDC = "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
-const VERIFIED_CODE = "3jWHECjP5BCezXDBPR1XuQzb62KpBYaKZzhMXbmoHtWN";
+const VERIFIED_CODE = VAULTS[PICK].code;
 const MEMBERS = ["alice", "ben", "cara", "dan", "emma"].map((m) => `${m}.dissentfinance.near`);
 const RAW = "https://raw.githubusercontent.com/QijomoFav35/Dissent-Finance/main/agent/mainnet";
 const RPCS = ["https://free.rpc.fastnear.com", "https://rpc.mainnet.near.org", "https://near.drpc.org", "https://rpc.intea.rs"];
@@ -163,17 +170,19 @@ async function load() {
   $("status").textContent = "Reading mainnet…";
   $("error").className = "panel bad";
   try {
-    const [account, keys, balances, spend, proposal, len, evidenceText] = await Promise.all([
+    const [account, keys, balances, spend, len, evidenceText] = await Promise.all([
       query({ request_type: "view_account", account_id: VAULT }),
       query({ request_type: "view_access_key_list", account_id: VAULT }),
       view(VAULT, "get_balances"),
       view(VAULT, "get_spend", { spend_id: 0 }),
-      view(DAO, "get_proposal", { id: 0 }),
       view(VAULT, "get_record_len"),
       fetch(`${RAW}/evidence.jsonl`).then((r) => (r.ok ? r.text() : "")).catch(() => ""),
     ]);
+    const proposal = await view(DAO, "get_proposal", { id: spend.proposal_id });
     const record = (await view(VAULT, "get_record", { from_index: 0, limit: Math.min(len, 100) })).map((s) => JSON.parse(s));
-    const evidence = evidenceText.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+    // Lines written before v2 carry no vault field and all belong to v1.
+    const evidence = evidenceText.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter((e) => e && (e.vault ?? "vault.dissentfinance.near") === VAULT);
     const txFor = {};
     for (const e of evidence) {
       if (e.step === "join") txFor[`join:${e.account}`] = e.tx;
@@ -186,12 +195,14 @@ async function load() {
         txFor.cancel = e.cara_cancel;
       }
       if (e.step === "deploy_vault") txFor.deploy = e.tx;
+      if (e.step === "exit") txFor[`exit:${e.account}`] = e.tx;
+      if (e.step === "cancel") txFor.cancel = e.tx;
     }
 
     // ---------- the vault ----------
     const nKeys = keys.keys.length;
     $("keys").innerHTML = nKeys === 0 ? `<span class="ok">None.</span> Nobody can change the code or move funds outside its rules.` : `<span class="bad">${nKeys} key(s)</span>`;
-    const codeOk = account.code_hash === VERIFIED_CODE;
+    const codeOk = VERIFIED_CODE !== null && account.code_hash === VERIFIED_CODE;
     const meta = await view(VAULT, "contract_source_metadata").catch(() => null);
     const link = meta?.link ? `<a href="${esc(meta.link)}">${esc(meta.link.split("/tree/")[1]?.slice(0, 7) ?? "source")}</a>` : "no source link";
     $("code").innerHTML = `${codeOk ? '<span class="ok">Code hash is the one this page expects</span>' : '<span class="bad">Code hash is not the one this page expects</span>'}<div class="mono">${esc(account.code_hash)}</div><div style="font-size:.85rem">The contract names its source as commit ${link}. This page can't rebuild it; <code>near contract verify</code> below does.</div>`;
@@ -209,7 +220,7 @@ async function load() {
     $("spend").innerHTML = `
       <p><strong>${usdc(spend.amount)} USDC to ${short(spend.recipient)}</strong>, ${fundAtQueue ? `${Math.round(Number((BigInt(spend.amount) * 1000n) / fundAtQueue) / 10)}% of the ${usdc(fundAtQueue)} USDC the vault held when it was queued` : ""}.
       Status: <span class="pill ${spend.status === "Cancelled" ? "done" : "stay"}">${esc(spend.status)}</span></p>
-      <p>Approved in the DAO by ${approvers.map(short).join(" and ")} (DAO proposal 0 is ${esc(proposal.status)}${txFor.propose ? `, filed in ${tx(txFor.propose)}` : ""}). ${silent.map(short).join(", ")} did not vote.</p>
+      <p>Approved in the DAO by ${approvers.map(short).join(" and ")} (DAO proposal ${spend.proposal_id} is ${esc(proposal.status)}${txFor.propose ? `, filed in ${tx(txFor.propose)}` : ""}). ${silent.map(short).join(", ")} did not vote.</p>
       <p style="color:var(--muted);margin:0">The vault read this proposal back from <span class="mono">${DAO}</span> and queued it only because the DAO's record matched the call byte for byte. Its window would have closed at ${when(spend.window_ends)} UTC.</p>`;
 
     // ---------- timeline from the vault's record ----------
@@ -232,7 +243,7 @@ async function load() {
     // ---------- notes, hashed here ----------
     const notes = await Promise.all(MEMBERS.map(async (m) => {
       try {
-        const r = await fetch(`${RAW}/notes/0-${m}.json`);
+        const r = await fetch(`${RAW}/${VAULTS[PICK].notes}/0-${m}.json`);
         if (!r.ok) return { m, missing: true };
         const published = await r.json();
         return { m, published, computed: await sha256(canonical(published.note)) };
@@ -278,6 +289,9 @@ async function load() {
     $("error").textContent = `Every RPC endpoint failed: ${e?.message ?? e}. Try "Read again" in a minute.`;
   }
 }
+$("switch").innerHTML = Object.entries(VAULTS).map(([k, v]) => k === PICK ? `<strong>${v.label}</strong>` : `<a href="?v=${k}">${v.label}</a>`).join(" · ");
+document.querySelector('a[href="https://nearblocks.io/address/vault.dissentfinance.near"]')?.setAttribute("href", `https://nearblocks.io/address/${VAULT}`);
+document.querySelectorAll(".v.mono a").forEach((a) => { if (a.textContent === "vault.dissentfinance.near") a.textContent = VAULT; });
 $("reload").addEventListener("click", load);
 load();
 </script>

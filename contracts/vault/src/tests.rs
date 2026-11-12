@@ -858,3 +858,23 @@ fn fee_is_a_tenth_of_a_percent_rounded_down() {
     assert_eq!(fee_for(999), 0);
     assert_eq!(fee_for(1_000), 1);
 }
+
+#[test]
+fn a_claim_that_keeps_bouncing_does_not_grow_the_stored_record() {
+    let (mut v, env) = five_members();
+    env.call(&acc("alice.near"), 0);
+    v.exit(None);
+    // Alice's USDC transfer bounces (say she removed her USDC storage) and becomes claimable.
+    env.call(&vault_id(), 0);
+    v.settle_transfer(acc("alice.near"), Token::Usdc, 100 * USDC, false);
+    let before = v.get_record_len();
+    for _ in 0..50 {
+        env.call(&acc("alice.near"), 0);
+        v.claim(Token::Usdc);
+        env.call(&vault_id(), 0);
+        v.settle_transfer(acc("alice.near"), Token::Usdc, 100 * USDC, false);
+    }
+    assert_eq!(v.get_record_len(), before, "a bouncing claim loop must not add stored entries");
+    assert_eq!(v.get_claimable(acc("alice.near")).1 .0, 100 * USDC);
+    assert_books(&v, Token::Usdc);
+}
