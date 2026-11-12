@@ -25,7 +25,7 @@ The DAO stays as it is. It gets one new kind of proposal, a `FunctionCall` to th
 While the window is open:
 
 - members who did not approve can `exit` and receive their exact pro-rata share of NEAR and USDC (rounded down in the vault's favour)
-- members whose approval the vault recorded can't exit until the spend is settled, so they can't approve a payment and then leave before it lands. This starts when the spend is queued: a member who votes Approve and leaves before the vote that passes it is no longer a holder, so their approval isn't recorded and they aren't bound
+- a member can always leave, including one who approved a spend. For each open spend a member approved, their pro-rata part of its cost (with the fee, rounded up) is held back from what they take and kept for that spend alone: if it pays, the held part pays its share of it; if it is cancelled, the held part becomes claimable by the member who left (`claim`). So approving a payment and leaving before it lands saves nothing, the members who stay are left as well off as if the leaver had stayed (as long as the spends a leaver approved add up to no more than their whole share; past that, the hold stops at everything they had), and approving one spend never locks a member into another. `get_exit_quote` shows what an exit would pay now and `get_holds` what is held for a spend. (v1, which is keyless, still has the earlier rule: an approver could not exit while any spend they approved was open.)
 - nobody can join, so a late deposit can't dilute anyone's share
 - the vault records approvals only from accounts that hold shares, so a council member who has left the vault can't block a spend by approving it, and a spend no holder approved is refused. Their vote still counts toward the DAO's own threshold, because the DAO's rules are unchanged
 - at most 8 spends can be open at once, and memos are capped at 256 bytes, so agents can always read every open spend and an exit's work stays small (the sandbox tests run every exit at the 80 Tgas the agents attach on mainnet)
@@ -40,16 +40,35 @@ The agent signs with a NEAR function-call key that the member adds to their own 
 
 The rules are deterministic on purpose: the same spend, rules and fund always give the same decision, and anyone can replay it from the note. There is no model in the exit path.
 
+## Share market: selling instead of leaving
+
+A member who wants out does not have to take money from the fund. They can offer their shares, and the other members' market agents bid for them.
+
+- Bid funds: a member who holds shares sends USDC to the vault with `ft_transfer_call` and msg `bid_funds` (at least 0.01 USDC). It is kept apart from the fund, stays the member's, and can be taken back with `withdraw_bid_funds` or comes back in the same transfer as their exit.
+- No shares change hands around a spend: `offer_shares` is refused while one is open, and an offer during which a spend was queued ends unsold when settled, its best bid returned. Otherwise a member who approved a spend could sell to one who did not, and the buyer could leave with those shares without the approver's part being held back; or a seller could collect bids and then queue a spend the buyer never priced.
+- `offer_shares(shares, reserve)`, signed with the member's own key, opens a timed auction that lasts one spend window. Each member can have one open offer, and the vault at most eight. Offers and withdrawals go to the transaction log only; sales are kept in the stored record.
+- `bid(offer_id, amount)` must meet the reserve, or beat the best bid by at least 1%, from the bidder's free bid funds. A beaten bid goes straight back to its bidder's funds.
+- After the window anyone calls `settle_offer`: the shares move to the best bidder, the USDC goes to the seller, and a `share_sale` goes into the vault's record. An offer with no bids ends unsold, and the seller can withdraw an offer that has none.
+- The fund itself never moves in a sale, so a sale changes nobody else's share. A member who exits with an open offer or a leading bid has the offer withdrawn and the bid returned first.
+
+Market agents (`agent/src/market.js`) bid by their member's own limits: the most they pay as a share of what the shares are worth, a cap on one bid, and what the member counts 1 NEAR as. Shares are valued at their part of the fund's USDC less their part of every open USDC spend (a buyer inherits the spends), plus the same for NEAR at the member's NEAR price. An agent bids the least that leads and never above its limit, so the agent willing to pay the most wins at about the second-highest limit. A market agent signs with its own function-call key, limited to `bid` and `settle_offer`. It cannot exit, offer its member's shares or take bid funds out, so a leaked market key can at most win an auction with the bid funds the member chose to put in. Selling shares takes the member's own key.
+
+`node agent/sim/market.js` runs that decision code for 20 members with random limits and funds through 30 auctions under the vault's rules. Seed 1 sells 22 of 30 offers at a median of 94.78% of value; in every sale of seeds 1 to 3 the agent with the highest limit won, and every unit of USDC and every share is accounted for.
+
 ## Known limits
 
 - The vault is a separate contract next to the DAO, so the DAO's own rules still decide what passes. The vault decides only whether a passed spend can be paid, and when.
 - Members' exits are protected, but the vault's spare storage is not. Outsiders with 0.1 USDC each can fill it with pending deposits: each takes roughly 150 bytes, so about a hundred of them fill the mainnet vault's spare room. The USDC stays theirs and comes back with `cancel_join`. Exits, cancels and claims keep working; new joins, rule changes and spends are refused until someone sends the vault a little NEAR, which anyone can do.
 - The reserve grows with the number of members, about 1 KB each. The mainnet vault was funded with 0.25 NEAR above its code's storage, enough for a small group; a larger group needs someone to send it more NEAR first.
-- At most 8 spends can be open at once. A majority that keeps 8 slots full can stop new spends and joins, though doing so keeps their own exits locked.
+- At most 8 spends can be open at once. A majority that keeps 8 slots full can stop new spends and joins; if they leave, they still pay their part of each of those spends they approved.
 - If a spend's payment bounces and the receiver later claims it, the receiver is still counted as never paid, which only matters for the "new receiver" rule.
 - The spend window is set when a vault is created and can't change once its key is deleted. The mainnet vaults use 10 minutes so a full cycle can be watched; a real group would choose hours or days.
 - NEAR or USDC sent to the vault in any way other than `ft_transfer_call` with msg "join" plus `join` is not credited to anyone and can't be recovered.
 - The vault reads the DAO's `get_policy` and `get_proposal`. A future Sputnik upgrade that changed their shape would stop new joins and spends; exits don't read the DAO and would keep working.
+- Money held back from an approver who left comes back only through `claim`, which needs a key that can call it (the member's full key; agent keys call only `exit` and `cancel_spend`).
+- A share sale has no price oracle. Each market agent values the NEAR side of the fund at a NEAR price its member sets, and the reserve protects the seller from a low bid, not from a reserve they set too low.
+- Any spend queued while an auction runs ends that auction unsold, even a spend that settles before the auction ends. This protects bidders, and it means a council that queues spends often leaves little room for sales.
+- A bidder who exits while leading an auction takes their bid back, and the auction carries on with no bids; earlier, outbid bids are not restored, so a late exit by the leader can leave an offer unsold.
 - The agent runs on the member's own machine or server. If it is offline for the whole window, the member can still exit by hand.
 
 ## Run it yourself
@@ -70,7 +89,7 @@ You need Rust 1.95 (pinned in `rust-toolchain.toml`) with the `wasm32-unknown-un
    cd agent && npm install && npm test
    ```
 
-   You should see 37 pass, 0 fail. They include the story above, retries that reuse the same note with a backoff and a cap, a prompt injection in the spend's memo, five separate agents each with only its own key, the simulation below, the guard refusing any key broader than an agent key, and `verify.mjs` run against a stand-in for mainnet: every check passes on the real state, and three planted faults (a widened agent key, a wrong note hash, unbalanced books) each fail their check.
+   You should see 48 pass, 0 fail. They include the story above, retries that reuse the same note with a backoff and a cap, a prompt injection in the spend's memo, five separate agents each with only its own key, the simulation below, the guard refusing any key broader than an agent key, the market agent's bids, limits and settling, the 20-agent market simulation, and `verify.mjs` run against a stand-in for mainnet: every check passes on the real state and on the state the third run leaves, and four planted faults (a widened agent key, a wrong note hash, unbalanced books, a share sale under its reserve) each fail their check.
 
    The demo page has its own tests, in headless Chromium against a stand-in for mainnet RPC:
 
@@ -78,7 +97,7 @@ You need Rust 1.95 (pinned in `rust-toolchain.toml`) with the `wasm32-unknown-un
    cd tests/page && npm install && npx playwright install chromium && npm test
    ```
 
-   You should see 8 pass: v1's checks and two outcomes read from its record, later exits kept out of the spend, a note whose hash does not match failing the page's check, the proof panel, v2 with the guard run on duty, the guard row when GitHub's API refuses, the "Try it" panel running the agent's own `rules.js` for presets and custom rules, and no sideways scroll on a phone.
+   You should see 9 pass: v1's checks and two outcomes read from its record, later exits kept out of the spend, a note whose hash does not match failing the page's check, the proof panel, v2 with the guard run on duty, the guard row when GitHub's API refuses, the share market panel before and after the market code, the "Try it" panel running the agent's own `rules.js` for presets and custom rules, and no sideways scroll on a phone.
 
 3. Contract unit and property tests.
 
@@ -86,7 +105,7 @@ You need Rust 1.95 (pinned in `rust-toolchain.toml`) with the `wasm32-unknown-un
    cd contracts/vault && cargo test --lib
    ```
 
-   You should see 64 passed. The two property tests run random sequences of joins, spends, votes, exits and claims and check after every step that shares add up, the books balance per token, exits pay the exact pro-rata amount and nothing executes early or twice. They take several minutes at 256 cases. `PROPTEST_CASES=32 cargo test --lib` runs a shorter pass.
+   You should see 82 passed. The two property tests run random sequences of joins, spends, votes, exits, claims, bid deposits, offers, bids, settles and withdrawals and check after every step that shares add up, the books balance per token, exits pay the exact pro-rata amount less what is held back for spends the leaver approved, what is held back adds up, a spend stays payable after its approvers leave (unless the spends a leaver approved add up to more than their whole share), bid funds add up, and nothing executes early or twice. They take several minutes at 256 cases. `PROPTEST_CASES=32 cargo test --lib` runs a shorter pass.
 
 4. End to end against the real Sputnik code.
 
@@ -94,7 +113,7 @@ You need Rust 1.95 (pinned in `rust-toolchain.toml`) with the `wasm32-unknown-un
    cargo test --test sputnik_flow
    ```
 
-   You should see 8 passed. This deploys the mainnet DAO code, a test USDC and the vault in a local sandbox and runs the story with real proposals and votes, plus a normal spend paid after the window in USDC and in NEAR, a proposal whose arguments don't match being refused, a queue call from anyone other than the DAO being refused, a non-member's join being refunded, an exit to an account with no USDC storage becoming claimable, and an agent key being refused on every call outside `exit` and `cancel_spend`.
+   You should see 10 passed. This deploys the mainnet DAO code, a test USDC and the vault in a local sandbox and runs the story with real proposals and votes, plus a normal spend paid after the window in USDC and in NEAR, a proposal whose arguments don't match being refused, a queue call from anyone other than the DAO being refused, a non-member's join being refunded, an exit to an account with no USDC storage becoming claimable, an agent key being refused on every call outside `exit` and `cancel_spend`, the members voting the DAO's factory auto-update off, and a share sale with market agents' keys, in which a market key is refused both an exit and an offer of its member's shares, and the fund does not move.
 
 5. Five agent processes, no human after the vote.
 
@@ -119,14 +138,14 @@ You need Rust 1.95 (pinned in `rust-toolchain.toml`) with the `wasm32-unknown-un
    node agent/mainnet/verify.mjs --vault vault
    ```
 
-   For v2 and then v1, it reads one final block and prints about 19 numbered checks, each PASS, FAIL or INFO:
+   For v2 and then v1, it reads one final block and prints about 22 numbered checks, each PASS, FAIL or INFO:
 
    - the vault's code hash and the commit its NEP-330 metadata names; its access keys (INFO on v2, which still has its key; FAIL if v1 ever had one); the DAO and token it answers to;
-   - the DAO's code is the code `sputnik-dao.near` publishes as its default, and the same bytes as `contracts/vault/res/sputnikdao2.wasm`, which the sandbox tests deploy; the DAO's policy (one council of the five named members, no Everyone role, two votes);
-   - every member's agent key, read from their own account: a function-call key for `exit` and `cancel_spend` on the vault, nothing more;
+   - the DAO's code is the code `sputnik-dao.near` publishes as its default, and the same bytes as `contracts/vault/res/sputnikdao2.wasm`, which the sandbox tests deploy; the DAO's policy (one council of the five named members, no Everyone role, two votes); whether the DAO's factory auto-update is off (INFO while it is on);
+   - every member's agent key, read from their own account: a function-call key for `exit` and `cancel_spend` on the vault, and at most a market key for `bid` and `settle_offer`, nothing more;
    - spend 0 is `Cancelled`; the DAO proposal is Approved and its `queue_spend` arguments are the spend; the Approve votes are the spend's approvers; the vault's record shows the queue, the exits and the cancel in that order, inside the window;
-   - for each exit, the `reason_hash` in the vault's record equals the hash of the published note, computed on your machine, and so does the one in the exit transaction while the RPC endpoints still serve it (older transactions need an archival node; the line says which was compared); leavers hold no shares;
-   - the remaining shares add up; the USDC and NEAR books balance (held = deposited - spent - fees - exited - refunded); the USDC contract's own balance for the vault covers what the vault owes members.
+   - for each exit, the `reason_hash` in the vault's record equals the hash of the published note, computed on your machine, and so does the one in the exit transaction while the RPC endpoints still serve it (older transactions need an archival node; the line says which was compared); leavers hold no shares unless the record shows them joining again after the cancel;
+   - the remaining shares add up; the USDC and NEAR books balance (held = deposited - spent - fees - exited - refunded); the USDC contract's own balance for the vault covers what the vault owes members, bid funds included; what is held back for open spends equals the sum of their holds; every share sale was at or above its reserve and is in the vault's record (both INFO on code from before the market).
 
    It should end with `All checks passed`. The exit code is the number of failed checks. `--json` prints the same checks as JSON. The `Mainnet checks` workflow runs it every hour.
 
@@ -256,7 +275,7 @@ To run it yourself with your own agent keys, from `agent/`: `BEN_AGENT_KEY=... C
 contracts/vault       the vault contract, unit tests, property tests, sandbox tests
 contracts/test-usdc   a NEP-141 token with open mint, for tests only
 agent/src             the exit agent: rules, notes, reader, limited-key signer, watcher
-agent/sim             the swarm replay
+agent/sim             the swarm replay and the share market simulation
 agent/mainnet         the mainnet scripts, evidence.jsonl, published notes, verify.mjs, guard.mjs
 tests/page            headless tests of the demo page
 docs                  the live page (GitHub Pages), its Trezu screenshot, llms.txt

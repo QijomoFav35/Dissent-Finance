@@ -574,12 +574,53 @@ fn exit_twice_fails() {
 }
 
 #[test]
-#[should_panic(expected = "ERR_APPROVED_SPEND_PENDING")]
-fn approver_cannot_exit_while_their_spend_is_open() {
-    let (mut v, env) = five_members();
-    queue(&mut v, &env, 1, "ben.near", Token::Usdc, 300 * USDC, two_approvals());
+fn an_approver_who_leaves_pays_their_part_of_the_spend_they_approved() {
+    // Five members with 100 USDC each. Ben and Cara approve paying 300 USDC to Ben.
+    let (mut v, mut env) = five_members();
+    let id = queue(&mut v, &env, 1, "ben.near", Token::Usdc, 300 * USDC, two_approvals());
+    let cost = 300 * USDC + fee_for(300 * USDC);
+    // Cara approved, so her share comes out of what is left once the spend and its fee are paid.
+    let (_, quoted) = v.get_exit_quote(acc("cara.near"));
+    assert_eq!(quoted.0, (500 * USDC - cost) / 5);
     env.call(&acc("cara.near"), 0);
     v.exit(None);
+    assert_eq!(v.get_ledger(Token::Usdc).exited.0, (500 * USDC - cost) / 5);
+    // The spend still pays in full, and the four who stayed hold exactly what they would have had.
+    env.now += WINDOW;
+    env.call(&acc("anyone.near"), 0);
+    v.execute_spend(id);
+    assert_eq!(v.get_balances().usdc.0, 4 * (500 * USDC - cost) / 5);
+    assert_books(&v, Token::Usdc);
+}
+
+#[test]
+fn approving_one_spend_does_not_lock_a_member_into_another() {
+    // The cross-spend case: Cara approves a small spend B but objects to a large spend A.
+    let (mut v, mut env) = five_members();
+    let a = queue(&mut v, &env, 1, "ben.near", Token::Usdc, 300 * USDC, json!({ "ben.near": "Approve", "dan.near": "Approve" }));
+    let b = queue(&mut v, &env, 2, "shop.near", Token::Usdc, 10 * USDC, json!({ "ben.near": "Approve", "cara.near": "Approve" }));
+    // She can leave during A's window, and only B, which she approved, is set aside from her share.
+    env.call(&acc("cara.near"), 0);
+    v.exit(Some("hash".into()));
+    let b_cost = 10 * USDC + fee_for(10 * USDC);
+    assert_eq!(v.get_ledger(Token::Usdc).exited.0, (500 * USDC - b_cost) / 5);
+    assert_eq!(v.get_shares(acc("cara.near")).0, 0);
+    // Both spends stay payable for the members who are still in.
+    env.now += WINDOW;
+    env.call(&acc("anyone.near"), 0);
+    v.execute_spend(a);
+    v.execute_spend(b);
+    assert_books(&v, Token::Usdc);
+}
+
+#[test]
+fn a_member_who_approved_nothing_takes_the_full_share() {
+    let (mut v, env) = five_members();
+    queue(&mut v, &env, 1, "ben.near", Token::Usdc, 300 * USDC, two_approvals());
+    assert_eq!(v.get_exit_quote(acc("alice.near")).1 .0, 100 * USDC);
+    env.call(&acc("alice.near"), 0);
+    v.exit(None);
+    assert_eq!(v.get_ledger(Token::Usdc).exited.0, 100 * USDC);
 }
 
 #[test]
@@ -917,4 +958,235 @@ fn a_join_whose_share_maths_would_overflow_is_refused_and_refunded() {
     let refunded: u128 = SENT.with(|s| s.borrow().iter().filter(|(to, t, _)| to == &acc("ben.near") && *t == Token::Near).map(|(_, _, a)| *a).sum());
     assert_eq!(refunded, 10 * NEAR, "the NEAR goes back");
     assert_eq!(v.joining_near, 0, "nothing left counted as joining");
+}
+
+// ---------- the share market ----------
+
+fn fund_bids(v: &mut Vault, env: &Env, who: &str, amount: u128) -> u128 {
+    env.call(&usdc(), 0);
+    match v.ft_on_transfer(acc(who), U128(amount), "bid_funds".into()) {
+        PromiseOrValue::Value(r) => r.0,
+        _ => panic!("expected value"),
+    }
+}
+
+/// Alice offers half her shares; Dan and Emma bid; Emma wins.
+fn auction() -> (Vault, Env, u64) {
+    let (mut v, env) = five_members();
+    for m in ["dan.near", "emma.near"] {
+        assert_eq!(fund_bids(&mut v, &env, m, 60 * USDC), 0);
+    }
+    let half = v.get_shares(acc("alice.near")).0 / 2;
+    env.call(&acc("alice.near"), 0);
+    let id = v.offer_shares(U128(half), U128(45 * USDC));
+    env.call(&acc("dan.near"), 0);
+    v.bid(id, U128(46 * USDC));
+    env.call(&acc("emma.near"), 0);
+    v.bid(id, U128(48 * USDC));
+    (v, env, id)
+}
+
+#[test]
+fn a_sale_moves_shares_to_the_best_bidder_and_leaves_the_fund_alone() {
+    let (mut v, mut env, id) = auction();
+    let before = v.get_balances();
+    let alice_shares = v.get_shares(acc("alice.near")).0;
+    let emma_shares = v.get_shares(acc("emma.near")).0;
+    let offered = v.get_offer(id).unwrap().shares.0;
+    env.now += WINDOW;
+    env.call(&acc("anyone.near"), 0);
+    v.settle_offer(id);
+    let o = v.get_offer(id).unwrap();
+    assert_eq!(o.status, OfferStatus::Sold);
+    assert_eq!(v.get_shares(acc("alice.near")).0, alice_shares - offered);
+    assert_eq!(v.get_shares(acc("emma.near")).0, emma_shares + offered);
+    // The fund is untouched: same money, same total of shares.
+    let after = v.get_balances();
+    assert_eq!((after.usdc.0, after.near.0, after.total_shares.0), (before.usdc.0, before.near.0, before.total_shares.0));
+    // Dan was outbid, so his 46 went back to his funds; Emma's 48 went to Alice.
+    assert_eq!(v.get_bid_funds(acc("dan.near")).0, 60 * USDC);
+    assert_eq!(v.get_bid_funds(acc("emma.near")).0, 12 * USDC);
+    assert_eq!(v.get_bid_funds_totals().0 .0, 72 * USDC);
+    assert_books(&v, Token::Usdc);
+}
+
+#[test]
+#[should_panic(expected = "ERR_BID_TOO_LOW")]
+fn a_bid_below_the_reserve_is_refused() {
+    let (mut v, env) = five_members();
+    fund_bids(&mut v, &env, "dan.near", 60 * USDC);
+    env.call(&acc("alice.near"), 0);
+    let id = v.offer_shares(U128(10), U128(45 * USDC));
+    env.call(&acc("dan.near"), 0);
+    v.bid(id, U128(44 * USDC));
+}
+
+#[test]
+#[should_panic(expected = "ERR_BID_TOO_LOW")]
+fn a_bid_must_beat_the_best_by_one_percent() {
+    let (mut v, env, id) = auction();
+    env.call(&acc("dan.near"), 0);
+    v.bid(id, U128(48 * USDC + 48 * USDC / 100 - 1));
+}
+
+#[test]
+fn raising_your_own_bid_uses_only_the_difference() {
+    let (mut v, env, id) = auction();
+    env.call(&acc("emma.near"), 0);
+    v.bid(id, U128(55 * USDC));
+    assert_eq!(v.get_bid_funds(acc("emma.near")).0, 5 * USDC);
+    assert_eq!(v.get_offer(id).unwrap().best_bid.0, 55 * USDC);
+}
+
+#[test]
+#[should_panic(expected = "ERR_NO_BID_FUNDS")]
+fn a_bid_needs_the_funds_behind_it() {
+    let (mut v, env, id) = auction();
+    env.call(&acc("dan.near"), 0);
+    v.bid(id, U128(61 * USDC));
+}
+
+#[test]
+fn outsiders_can_neither_fund_bids_nor_bid() {
+    let (mut v, env) = five_members();
+    assert_eq!(fund_bids(&mut v, &env, "stranger.near", 10 * USDC), 10 * USDC, "returned to the sender");
+    assert_eq!(fund_bids(&mut v, &env, "dan.near", MIN_BID_FUNDS_TEST - 1), MIN_BID_FUNDS_TEST - 1, "dust is returned");
+    env.call(&acc("alice.near"), 0);
+    let id = v.offer_shares(U128(10), U128(USDC));
+    env.call(&acc("stranger.near"), 0);
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| v.bid(id, U128(USDC))));
+    assert!(r.is_err());
+}
+const MIN_BID_FUNDS_TEST: u128 = market::MIN_BID_FUNDS;
+
+#[test]
+#[should_panic(expected = "ERR_AUCTION_RUNNING")]
+fn an_auction_cannot_be_settled_early() {
+    let (mut v, env, id) = auction();
+    env.call(&acc("anyone.near"), 0);
+    v.settle_offer(id);
+}
+
+#[test]
+#[should_panic(expected = "ERR_OFFER_CLOSED")]
+fn nobody_can_bid_after_the_end() {
+    let (mut v, mut env, id) = auction();
+    env.now += WINDOW;
+    env.call(&acc("dan.near"), 0);
+    v.bid(id, U128(55 * USDC));
+}
+
+#[test]
+fn an_offer_nobody_bids_on_lapses_and_the_seller_keeps_the_shares() {
+    let (mut v, mut env) = five_members();
+    let mine = v.get_shares(acc("alice.near")).0;
+    env.call(&acc("alice.near"), 0);
+    let id = v.offer_shares(U128(mine), U128(90 * USDC));
+    env.now += WINDOW;
+    env.call(&acc("anyone.near"), 0);
+    v.settle_offer(id);
+    assert!(v.get_offer(id).is_none(), "an unsold offer is removed");
+    assert!(v.get_open_offers().is_empty());
+    assert_eq!(v.get_shares(acc("alice.near")).0, mine);
+}
+
+#[test]
+fn the_seller_can_withdraw_before_any_bid_but_not_after() {
+    let (mut v, env) = five_members();
+    env.call(&acc("alice.near"), 0);
+    let id = v.offer_shares(U128(10), U128(USDC));
+    v.withdraw_offer(id);
+    assert!(v.get_open_offers().is_empty());
+    let (mut v, env, id) = auction();
+    env.call(&acc("alice.near"), 0);
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| v.withdraw_offer(id)));
+    assert!(r.is_err(), "a bid binds the seller until the end");
+}
+
+#[test]
+#[should_panic(expected = "ERR_OFFER_OPEN")]
+fn one_open_offer_per_member() {
+    let (mut v, env) = five_members();
+    env.call(&acc("alice.near"), 0);
+    v.offer_shares(U128(10), U128(USDC));
+    v.offer_shares(U128(10), U128(USDC));
+}
+
+#[test]
+fn leaving_ends_the_members_part_in_the_market() {
+    // Emma holds the best bid on Alice's offer and leaves: her bid is dropped and her funds go back.
+    let (mut v, env, id) = auction();
+    let total_before = v.get_bid_funds_totals().0 .0;
+    env.call(&acc("emma.near"), 0);
+    v.exit(None);
+    let o = v.get_offer(id).unwrap();
+    assert_eq!(o.best_bidder, None);
+    assert_eq!(o.bids, 0);
+    assert_eq!(v.get_bid_funds(acc("emma.near")).0, 0);
+    assert_eq!(v.get_bid_funds_totals().0 .0, total_before - 60 * USDC);
+    // Alice leaves too: her open offer is withdrawn.
+    env.call(&acc("alice.near"), 0);
+    v.exit(None);
+    assert!(v.get_open_offers().is_empty());
+    assert_books(&v, Token::Usdc);
+}
+
+#[test]
+fn a_spend_queued_during_an_auction_ends_it_unsold_and_returns_the_bid() {
+    let (mut v, mut env, offer) = auction();
+    let emma_funds = v.get_bid_funds(acc("emma.near")).0;
+    let best = v.get_offer(offer).unwrap().best_bid.0;
+    let alice = v.get_shares(acc("alice.near")).0;
+    env.call(&vault_id(), 0);
+    let spend = queue(&mut v, &env, 1, "ben.near", Token::Usdc, 300 * USDC, two_approvals());
+    env.now += WINDOW;
+    // Even with the spend still open, settling ends the offer: the bids priced a fund without it.
+    env.call(&acc("anyone.near"), 0);
+    v.settle_offer(offer);
+    assert!(v.get_offer(offer).is_none(), "an unsold offer is removed");
+    assert!(v.get_open_offers().is_empty());
+    assert_eq!(v.get_bid_funds(acc("emma.near")).0, emma_funds + best, "Emma's bid comes back");
+    assert_eq!(v.get_shares(acc("alice.near")).0, alice, "Alice keeps her shares");
+    v.execute_spend(spend);
+    assert_eq!(v.get_spend(spend).unwrap().status, SpendStatus::Executed);
+    assert_books(&v, Token::Usdc);
+}
+
+/// An approver cannot pass their shares to a member who did not approve and so escape the hold:
+/// with a spend open there are no offers and no settling.
+#[test]
+fn an_approver_cannot_sell_their_way_out_of_a_spend() {
+    let (mut v, env) = five_members();
+    assert_eq!(fund_bids(&mut v, &env, "dan.near", 60 * USDC), 0);
+    env.call(&vault_id(), 0);
+    let _spend = queue(&mut v, &env, 1, "ben.near", Token::Usdc, 300 * USDC, two_approvals());
+    env.call(&acc("ben.near"), 0);
+    let ben = v.get_shares(acc("ben.near")).0;
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| v.offer_shares(U128(ben), U128(1))));
+    assert!(r.is_err(), "Ben approved the open spend, so he cannot offer his shares");
+    assert!(v.get_open_offers().is_empty());
+}
+
+#[test]
+fn offers_do_not_grow_the_stored_record() {
+    let (mut v, env) = five_members();
+    let len = v.get_record_len();
+    for _ in 0..20 {
+        env.call(&acc("alice.near"), 0);
+        let id = v.offer_shares(U128(1), U128(1));
+        v.withdraw_offer(id);
+    }
+    assert_eq!(v.get_record_len(), len, "offers and withdrawals go to the log only");
+    assert_eq!(v.get_offer_count(), 20);
+    assert!(v.get_offers(0, 100).is_empty(), "unsold offers are removed");
+}
+
+#[test]
+fn bid_funds_can_be_taken_back_but_not_a_locked_bid() {
+    let (mut v, env, _id) = auction();
+    env.call(&acc("emma.near"), 0);
+    v.withdraw_bid_funds(U128(12 * USDC));
+    assert_eq!(v.get_bid_funds(acc("emma.near")).0, 0);
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| v.withdraw_bid_funds(U128(1))));
+    assert!(r.is_err(), "the 48 locked in her best bid stays locked");
 }

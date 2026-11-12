@@ -10,6 +10,20 @@ use near_sdk::{
 };
 
 mod checks;
+pub mod market;
+pub use market::{Offer, OfferStatus};
+
+/// Storage keys for held-back parts, kept apart from the vault's state so its layout is unchanged.
+fn hold_key(spend_id: u64) -> Vec<u8> {
+    [b"hold:".as_slice(), &spend_id.to_le_bytes()].concat()
+}
+
+fn held_key(token: Token) -> Vec<u8> {
+    match token {
+        Token::Near => b"held:near".to_vec(),
+        Token::Usdc => b"held:usdc".to_vec(),
+    }
+}
 pub use checks::{check_proposal, is_member, ProposalCheck};
 
 pub const ERR_NOT_DAO: &str = "ERR_NOT_DAO";
@@ -28,7 +42,6 @@ pub const ERR_ALREADY_EXECUTED: &str = "ERR_ALREADY_EXECUTED";
 pub const ERR_SPEND_CANCELLED: &str = "ERR_SPEND_CANCELLED";
 pub const ERR_SPEND_UNAFFORDABLE: &str = "ERR_SPEND_UNAFFORDABLE";
 pub const ERR_SPEND_AFFORDABLE: &str = "ERR_SPEND_AFFORDABLE";
-pub const ERR_APPROVED_SPEND_PENDING: &str = "ERR_APPROVED_SPEND_PENDING";
 pub const ERR_NO_SHARES: &str = "ERR_NO_SHARES";
 pub const ERR_NO_PENDING_DEPOSIT: &str = "ERR_NO_PENDING_DEPOSIT";
 pub const ERR_EMPTY_DEPOSIT: &str = "ERR_EMPTY_DEPOSIT";
@@ -149,6 +162,8 @@ pub struct Ledger {
     pub fees: U128,
     pub exited: U128,
     pub refunded: U128,
+    /// Part of `balance` held back for open spends from members who approved them and left.
+    pub held: U128,
 }
 
 #[near(serializers = [borsh])]
@@ -255,6 +270,9 @@ impl Vault {
     /// NEP-141 receiver. Step 1 of joining: USDC sent with msg "join" becomes a pending deposit.
     pub fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128> {
         require!(env::predecessor_account_id() == self.usdc, ERR_WRONG_TOKEN);
+        if msg == "bid_funds" {
+            return PromiseOrValue::Value(U128(self.deposit_bid_funds(sender_id, amount.0)));
+        }
         if msg != "join" || amount.0 < MIN_JOIN_USDC {
             return PromiseOrValue::Value(amount);
         }
@@ -426,6 +444,10 @@ impl Vault {
         let fee = fee_for(spend.amount.0);
         require!(self.affordable(&spend), ERR_SPEND_UNAFFORDABLE);
 
+        // What was held back for this spend is used up paying it.
+        let held_for_it = self.hold_total(spend_id);
+        self.set_held(spend.token, self.held(spend.token) - held_for_it);
+        self.set_holds(spend_id, &[]);
         *self.balance_mut(spend.token) -= spend.amount.0 + fee;
         self.tally_mut(spend.token).spent += spend.amount.0;
         self.tally_mut(spend.token).fees += fee;
@@ -453,6 +475,24 @@ impl Vault {
             SpendStatus::Queued => {}
         }
         require!(!self.affordable(&spend), ERR_SPEND_AFFORDABLE);
+        // Members who left after approving it get back what was held for it, as claimable funds
+        // (no transfers here, so the call stays within an agent's gas).
+        let token = spend.token;
+        for (account, amount) in self.holds(spend_id) {
+            *self.balance_mut(token) -= amount;
+            self.set_held(token, self.held(token) - amount);
+            let tally = self.tally_mut(token);
+            tally.exited += amount;
+            tally.claimable += amount;
+            let map = match token {
+                Token::Near => &mut self.claim_near,
+                Token::Usdc => &mut self.claim_usdc,
+            };
+            let prev = map.get(&account).copied().unwrap_or(0);
+            map.insert(account.clone(), prev + amount);
+            self.log_only("hold_returned", json!({ "account_id": account, "spend_id": spend_id, "token": token, "amount": U128(amount) }));
+        }
+        self.set_holds(spend_id, &[]);
         spend.status = SpendStatus::Cancelled;
         self.spends.replace(spend_id as u32, spend);
         self.queued_ids.retain(|id| *id != spend_id);
@@ -463,15 +503,30 @@ impl Vault {
 
     /// Pays the caller their share of every token and burns their shares.
     /// Takes no deposit, so a function-call key limited to this vault can sign it.
+    ///
+    /// A member can always leave. For each open spend the member approved, their part of its cost is
+    /// held back from what they take: the vault keeps it for that spend alone. If the spend pays, the
+    /// held part pays its share of it; if it is cancelled, the held part becomes claimable by the
+    /// member who left. Approving and then leaving saves nothing, the members who stay are left as
+    /// well off as if the leaver had stayed, and every spend the leaver approved stays as payable as
+    /// it was. Spends the member did not approve take nothing from their share.
     pub fn exit(&mut self, reason_hash: Option<String>) {
         let account = env::predecessor_account_id();
         let owned = self.shares.get(&account).copied().unwrap_or(0);
         require!(owned > 0, ERR_NO_SHARES);
         require!(reason_hash.as_ref().map(|r| r.len() <= MAX_REASON).unwrap_or(true), ERR_REASON_TOO_LONG);
-        require!(!self.approves_open_spend(&account), ERR_APPROVED_SPEND_PENDING);
 
-        let near_out = pro_rata(self.near_balance, owned, self.total_shares);
-        let usdc_out = pro_rata(self.usdc_balance, owned, self.total_shares);
+        // Leaving also ends the member's part in the share market: their open offer is withdrawn,
+        // their best bids are dropped, and their bid funds go back with the rest.
+        let bid_funds = self.market_on_exit(&account);
+        let (outs, holds) = self.exit_amounts(&account);
+        let [near_out, usdc_out] = outs;
+        for (spend_id, token, amount) in &holds {
+            let mut list = self.holds(*spend_id);
+            list.push((account.clone(), *amount));
+            self.set_holds(*spend_id, &list);
+            self.set_held(*token, self.held(*token) + amount);
+        }
         self.shares.remove(&account);
         self.total_shares -= owned;
         self.near_balance -= near_out;
@@ -483,8 +538,10 @@ impl Vault {
         if near_out > 0 {
             self.send(account.clone(), Token::Near, near_out, None);
         }
-        if usdc_out > 0 {
-            self.send(account.clone(), Token::Usdc, usdc_out, None);
+        // One USDC transfer carries both the fund share and any bid funds, so an exit never needs
+        // more than the two transfers an agent's gas covers.
+        if usdc_out + bid_funds > 0 {
+            self.send(account.clone(), Token::Usdc, usdc_out + bid_funds, None);
         }
         self.emit(
             "exit",
@@ -552,6 +609,18 @@ impl Vault {
 
     pub fn get_shares(&self, account_id: AccountId) -> U128 {
         U128(self.shares.get(&account_id).copied().unwrap_or(0))
+    }
+
+    /// What `exit` would pay `account_id` now, as (NEAR, USDC), after setting aside the open spends
+    /// the account approved.
+    pub fn get_exit_quote(&self, account_id: AccountId) -> (U128, U128) {
+        let ([near, usdc], _) = self.exit_amounts(&account_id);
+        (U128(near), U128(usdc))
+    }
+
+    /// What is held back for an open spend from members who approved it and then left.
+    pub fn get_holds(&self, spend_id: u64) -> Vec<(AccountId, U128)> {
+        self.holds(spend_id).into_iter().map(|(a, n)| (a, U128(n))).collect()
     }
 
     pub fn get_members(&self, from_index: u32, limit: u32) -> Vec<(AccountId, U128)> {
@@ -622,6 +691,7 @@ impl Vault {
             fees: U128(t.fees),
             exited: U128(t.exited),
             refunded: U128(t.refunded),
+            held: U128(self.held(token)),
         }
     }
 }
@@ -680,17 +750,77 @@ impl Vault {
             .unwrap_or_else(|| env::panic_str(ERR_UNKNOWN_SPEND))
     }
 
+    /// True when the free balance plus what is held back for this spend covers it and its fee.
     fn affordable(&self, spend: &Spend) -> bool {
-        spend.amount.0 + fee_for(spend.amount.0) <= self.balance(spend.token)
+        spend.amount.0 + fee_for(spend.amount.0) <= self.free(spend.token).saturating_add(self.hold_total(spend.id))
     }
 
-    fn approves_open_spend(&self, account: &AccountId) -> bool {
-        self.queued_ids.iter().any(|id| {
-            self.spends
-                .get(*id as u32)
-                .map(|s| s.approvers.contains(account))
-                .unwrap_or(false)
-        })
+    /// What an exit by `account` pays now, per token as [NEAR, USDC], and what it holds back for
+    /// each open spend the account approved, as (spend id, token, amount). The share is taken from
+    /// the free balance (money not already held for open spends). For each approved spend the
+    /// account pays its pro-rata part of what earlier holds do not cover yet, rounded up so the
+    /// spend never ends up short.
+    pub(crate) fn exit_amounts(&self, account: &AccountId) -> ([u128; 2], Vec<(u64, Token, u128)>) {
+        let owned = self.shares.get(account).copied().unwrap_or(0);
+        let mut outs = [0u128; 2];
+        let mut holds = Vec::new();
+        for (i, token) in [Token::Near, Token::Usdc].into_iter().enumerate() {
+            let mut left = pro_rata(self.free(token), owned, self.total_shares);
+            for id in &self.queued_ids {
+                let Some(spend) = self.spends.get(*id as u32) else { continue };
+                if spend.token != token || !spend.approvers.contains(account) {
+                    continue;
+                }
+                let cost = spend.amount.0 + fee_for(spend.amount.0);
+                let uncovered = cost.saturating_sub(self.hold_total(*id));
+                let part = try_mul_div_ceil(uncovered, owned, self.total_shares).unwrap_or(uncovered).min(left);
+                if part > 0 {
+                    left -= part;
+                    holds.push((*id, token, part));
+                }
+            }
+            outs[i] = left;
+        }
+        (outs, holds)
+    }
+
+    /// The members' money of `token` not already held back for open spends.
+    pub(crate) fn free(&self, token: Token) -> u128 {
+        self.balance(token).saturating_sub(self.held(token))
+    }
+
+    /// Everything held back for open spends, in `token`.
+    pub(crate) fn held(&self, token: Token) -> u128 {
+        env::storage_read(&held_key(token))
+            .map(|b| u128::from_le_bytes(b.try_into().unwrap_or([0; 16])))
+            .unwrap_or(0)
+    }
+
+    fn set_held(&mut self, token: Token, amount: u128) {
+        if amount == 0 {
+            env::storage_remove(&held_key(token));
+        } else {
+            env::storage_write(&held_key(token), &amount.to_le_bytes());
+        }
+    }
+
+    /// The parts held back for one open spend, as (member who left, amount).
+    pub(crate) fn holds(&self, spend_id: u64) -> Vec<(AccountId, u128)> {
+        env::storage_read(&hold_key(spend_id))
+            .and_then(|b| near_sdk::borsh::from_slice(&b).ok())
+            .unwrap_or_default()
+    }
+
+    fn set_holds(&mut self, spend_id: u64, list: &[(AccountId, u128)]) {
+        if list.is_empty() {
+            env::storage_remove(&hold_key(spend_id));
+        } else {
+            env::storage_write(&hold_key(spend_id), &near_sdk::borsh::to_vec(list).unwrap_or_default());
+        }
+    }
+
+    fn hold_total(&self, spend_id: u64) -> u128 {
+        self.holds(spend_id).iter().map(|(_, a)| a).sum()
     }
 
     /// Checks the DAO's own record of the proposal, then queues the spend and opens its window.

@@ -182,6 +182,7 @@
       <a href="#outcomes">Outcomes</a>
       <a href="#try">Try it</a>
       <a href="#how">How it works</a>
+      <a href="#market">Share market</a>
       <a href="#run">Live run</a>
       <a href="#track">Track</a>
       <a href="#proof">Proof</a>
@@ -264,6 +265,30 @@
       <div class="panel"><h3>DAO approves, vault waits</h3><p>An approved proposal calls <code>queue_spend</code>. The vault reads the proposal back from the DAO and holds it for the window.</p></div>
       <div class="panel"><h3>Agents act</h3><p>Every agent writes a note, hashes it, and exits with the hash if a rule is broken. If the vault can no longer pay, an agent cancels the spend.</p></div>
     </div>
+  </section>
+
+  <section id="market">
+    <p class="eyebrow">Share market</p>
+    <h2>Leaving is not the only way out. Members' agents can buy a leaver's shares.</h2>
+    <p class="sub">A member who wants out without pulling money from the fund offers shares at a reserve price. The other members' market agents bid from USDC they keep in the vault, each by its own member's limits. The highest bid when the window ends buys the shares; the seller gets the USDC and the fund does not move. No shares change hands around a spend: no offers while one is open, and an offer during which one was queued ends unsold. A market agent's key can only bid and settle; offering shares takes the member's own key.</p>
+    <div class="steps">
+      <div class="panel"><h3>Fund your bids</h3><p>A member sends USDC to the vault with <code>bid_funds</code>. It stays theirs and comes back with their exit.</p></div>
+      <div class="panel"><h3>Offer shares</h3><p>With their own key, a member calls <code>offer_shares</code>: a timed auction with a reserve. Not while a spend is open; one offer per member, eight at most.</p></div>
+      <div class="panel"><h3>Agents bid</h3><p>Each bid must meet the reserve or beat the best bid by 1%. An agent bids the least that leads, up to its member's price limit and spend cap.</p></div>
+      <div class="panel"><h3>Settle</h3><p>After the window anyone calls <code>settle_offer</code>: shares to the buyer, USDC to the seller, a <code>share_sale</code> in the vault's record.</p></div>
+    </div>
+    <div class="grid" style="margin:14px 0">
+      <div class="panel"><div class="eyebrow">Market now</div><div id="mkt-state" class="pending">Reading…</div></div>
+      <div class="panel"><div class="eyebrow">Bid funds in the vault</div><div id="mkt-funds">…</div></div>
+    </div>
+    <div class="panel scroll"><table><thead><tr><th>Offer</th><th>Seller</th><th>Reserve</th><th>Best bid</th><th>Status</th></tr></thead><tbody id="mkt-offers"><tr><td colspan="5" class="pending">Reading…</td></tr></tbody></table></div>
+    <h3 style="margin-top:24px">Twenty agents, thirty auctions</h3>
+    <p class="sub">The simulation runs the live agent's own bidding code against the vault's auction rules: 20 members with random limits and funds, a random seller each time. Run it yourself: <code>node agent/sim/market.js --seed 2</code>.</p>
+    <div class="panel scroll"><table><thead><tr><th>Seed</th><th>Sold</th><th>Median price, % of value</th><th>Range</th><th>Bids per sale</th><th>Highest limit won</th></tr></thead><tbody>
+      <tr><td>1</td><td>22 of 30</td><td>94.78%</td><td>89% to 97%</td><td>5</td><td>100%</td></tr>
+      <tr><td>2</td><td>22 of 30</td><td>98%</td><td>87% to 99.84%</td><td>7.1</td><td>100%</td></tr>
+      <tr><td>3</td><td>23 of 30</td><td>95.64%</td><td>88.45% to 98%</td><td>5.8</td><td>100%</td></tr>
+    </tbody></table></div>
   </section>
 
   <section id="run">
@@ -352,7 +377,7 @@ near contract call-function as-read-only VAULT_ID get_record json-args '{"from_i
       <div class="panel"><h3>Not a veto</h3><p>Dissenters can't stop a spend. They can leave before it pays. If enough leave that the vault can't pay, the spend is cancelled.</p></div>
       <div class="panel"><h3>Not an AI that decides for you</h3><p>The agents apply rules each member wrote. The notes show every check and number they used.</p></div>
       <div class="panel"><h3>Not audited</h3><p>Small real amounts on mainnet. The contract has not had an external audit.</p></div>
-      <div class="panel"><h3>Approvers wait</h3><p>Members who voted Approve can't exit until the spend settles, so they can't approve and run.</p></div>
+      <div class="panel"><h3>Approvers pay their part</h3><p>A member who approved a spend can still leave, but their part of it stays behind for it, so approving and running saves nothing. If the spend is cancelled, they get that part back.</p></div>
     </div>
   </section>
 
@@ -419,7 +444,7 @@ function describeRule(c) {
   if (c.rule === "max_spend_share_bps") return `Leave if one spend takes more than ${c.limit / 100}% of the fund. This one takes ${c.value / 100}%.`;
   if (c.rule === "new_recipient") return `Leave if the receiver was never paid by the vault before. ${c.value === "never paid" ? "This one never was." : "This one was."}`;
   if (c.rule === "blocked_recipients") return `Leave if the receiver is on the blocked list (${(c.limit || []).map(short).join(", ")}). This one goes to ${short(c.value)}.`;
-  if (c.rule === "approved") return `Voted Approve, so the vault would refuse an exit until the spend settles.`;
+  if (c.rule === "approved") return `Voted Approve, so the agent stays for this spend. If the member left anyway, their part of it would stay behind for it.`;
   return esc(JSON.stringify(c));
 }
 
@@ -667,7 +692,7 @@ async function tryRun() {
   const fund = { near: String(BigInt(seen.near) + mineNear), usdc: String(BigInt(seen.usdc) + mineUsdc) };
   const rules = tryRules();
   const approved = $("try-appr").checked;
-  // The same branch the live agent takes (agent/src/agent.js): an approver stays, the vault would refuse its exit.
+  // The same branch the live agent takes (agent/src/agent.js): an approver's agent stays for that spend.
   const result = approved
     ? { decision: "stay", checks: [{ rule: "approved", limit: null, value: "member voted Approve", broken: false }] }
     : mod.evaluate(spend, rules, { balances: fund, recipientPaidBefore: paidBefore });
@@ -729,16 +754,25 @@ async function proof() {
     const ok = group.length === MEMBERS.length && MEMBERS.every((m) => group.includes(m)) && (p.roles || []).every((x) => x.kind !== "Everyone") && String(p.default_vote_policy?.threshold) === "2";
     return [ok ? "PASS" : "FAIL", `One council of ${group.length} named members (${group.map((m) => cap(short(m))).join(", ")}), no Everyone role, ${esc(String(p.default_vote_policy?.threshold))} votes pass a proposal.`];
   });
+  await tryAdd("Only the council can change the DAO's code", async () => {
+    const f = await view(DAO, "get_factory_info");
+    if (f.auto_update === false) return ["PASS", `Factory auto-update is off: the DAO refuses code from the factory, so only a passed council proposal can change it.`];
+    return ["INFO", `Factory auto-update is on: <span class="mono">${esc(f.factory_id)}</span> can push new DAO code. In the Sputnik source that opens an upgrade proposal, deployed after two weeks unless the council rejects it.`];
+  });
   const keyRows = [];
-  await tryAdd("Every agent key is limited to exit and cancel_spend", async () => {
-    let good = 0;
+  await tryAdd("Every agent key is limited to its job", async () => {
+    let good = 0, market = 0;
+    const PROTECT = "cancel_spend,exit", TRADE = "bid,settle_offer";
     for (const m of MEMBERS) {
       const list = await query({ request_type: "view_access_key_list", account_id: m });
       const fc = (list.keys || []).map((k) => k.access_key?.permission?.FunctionCall).filter((x) => x && x.receiver_id === VAULT);
       for (const k of fc) keyRows.push(`<tr><td>${cap(short(m))}</td><td class="mono">${esc(k.receiver_id)}</td><td class="mono">${k.method_names.map(esc).join(", ")}</td><td>${k.allowance ? `${near(k.allowance)} NEAR` : "no limit"}</td></tr>`);
-      if (fc.length && fc.every((k) => [...k.method_names].sort().join(",") === "cancel_spend,exit")) good++;
+      const kinds = fc.map((k) => [...k.method_names].sort().join(","));
+      market += kinds.filter((x) => x === TRADE).length;
+      if (kinds.includes(PROTECT) && kinds.every((x) => x === PROTECT || x === TRADE)) good++;
     }
-    return [good === MEMBERS.length ? "PASS" : "FAIL", `${good} of ${MEMBERS.length} members' agent keys can call only <code>exit</code> and <code>cancel_spend</code> on <span class="mono">${esc(VAULT)}</span>, with no deposit. The vault pays an exit only to the member's own account.`];
+    const tail = market ? ` ${market} market key(s) can only bid from bid funds and settle ended auctions: never exit, sell shares or take funds out.` : "";
+    return [good === MEMBERS.length ? "PASS" : "FAIL", `${good} of ${MEMBERS.length} members' agent keys can call only <code>exit</code> and <code>cancel_spend</code> on <span class="mono">${esc(VAULT)}</span>, with no deposit. The vault pays an exit only to the member's own account.${tail}`];
   });
   $("keyrows").innerHTML = keyRows.join("") || '<tr><td colspan="4">No agent keys found for this vault.</td></tr>';
   await tryAdd("The books balance", async () => {
@@ -771,9 +805,33 @@ async function proof() {
   $("proofrows").innerHTML = rows.join("");
 }
 
-$("reload").addEventListener("click", () => { load(); proof(); });
+async function market() {
+  let totals;
+  try { totals = await view(VAULT, "get_bid_funds_totals"); } catch {
+    $("mkt-state").textContent = `${VAULT} runs code from before the share market. It goes live when this vault is redeployed from the current commit.`;
+    $("mkt-state").classList.remove("pending");
+    $("mkt-funds").textContent = "None yet";
+    $("mkt-offers").innerHTML = '<tr><td colspan="5">No offers on this vault.</td></tr>';
+    return;
+  }
+  // Market amounts are small: show every USDC digit there is.
+  const usdc = (u) => String(Number(BigInt(u)) / 1e6);
+  const open = await view(VAULT, "get_open_offers");
+  const all = [];
+  const count = Number(await view(VAULT, "get_offer_count"));
+  for (let from = 0; from < count; from += 100) all.push(...(await view(VAULT, "get_offers", { from_index: from, limit: 100 })));
+  const sold = all.filter((o) => o.status === "Sold");
+  $("mkt-state").textContent = `${open.length} open offer(s), ${sold.length} sale(s) settled.`;
+  $("mkt-state").classList.remove("pending");
+  $("mkt-funds").textContent = `${usdc(totals[0])} USDC held for bids, ${usdc(totals[1])} USDC put in so far`;
+  const rows = all.map((o) => `<tr><td>${Number(o.id)}</td><td>${cap(short(o.seller))}</td><td>${usdc(o.reserve)} USDC</td><td>${Number(o.bids) ? `${usdc(o.best_bid)} USDC by ${cap(short(o.best_bidder))} (${Number(o.bids)} bids)` : "none yet"}</td><td>${esc(o.status)}${o.status === "Open" ? `, ends ${when(o.ends_at)}` : ""}</td></tr>`);
+  $("mkt-offers").innerHTML = rows.join("") || '<tr><td colspan="5">No offers yet.</td></tr>';
+}
+
+$("reload").addEventListener("click", () => { load(); proof(); market().catch(() => {}); });
 load();
 proof();
+market().catch((e) => { $("mkt-state").textContent = `Could not read the market: ${String(e?.message ?? e).slice(0, 100)}`; });
 </script>
 </body>
 </html>

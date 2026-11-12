@@ -18,25 +18,27 @@ On the page, "Try it, no wallet" loads agent/src/rules.js from the repo and runs
 
 ## Check it (read-only, Node 20+, no keys, no installs)
 
-- `node agent/mainnet/verify.mjs` checks v2, `--vault vault` checks v1, `--json` prints JSON. About 19 numbered PASS/FAIL/INFO checks at one final block: vault code hash and NEP-330 source, access keys, vault config, the DAO's code equal to the factory's published default and to the bytes the sandbox tests deploy, DAO policy, every member's agent key permissions, spend 0 cancelled, the DAO proposal's arguments equal to the queued spend, the votes, the record's order, every exit's reason_hash equal to the hash of its published note, leavers holding no shares, shares adding up, books balancing for USDC and NEAR, and the USDC contract's own balance for the vault. Exit code = number of failures.
+- `node agent/mainnet/verify.mjs` checks v2, `--vault vault` checks v1, `--json` prints JSON. About 22 numbered PASS/FAIL/INFO checks at one final block: vault code hash and NEP-330 source, access keys, vault config, the DAO's code equal to the factory's published default and to the bytes the sandbox tests deploy, DAO policy, the DAO's factory auto-update, every member's agent key permissions (exit agent and market agent), spend 0 cancelled, the DAO proposal's arguments equal to the queued spend, the votes, the record's order, every exit's reason_hash equal to the hash of its published note, leavers holding no shares unless they joined again, shares adding up, books balancing for USDC and NEAR, the USDC contract's own balance for the vault, what is held back for open spends, and share sales at or above their reserve. Exit code = number of failures.
 - `near contract verify deployed-at vault2.dissentfinance.near network-config mainnet now` rebuilds the deployed code from source.
 
 ## Tests
 
-- `cd agent && npm ci && npm test`: 37 tests. Agent decisions and retries, note hashing, rules, the swarm simulation, the guard refusing any key broader than an agent key, and verify.mjs against a stand-in for mainnet with three planted faults it must catch.
-- `cd tests/page && npm install && npx playwright install chromium && npm test`: 8 tests of the demo page in headless Chromium.
-- `cd contracts/vault && cargo test --lib`: 64 tests, two of them property tests (shares add up, books balance per token, exits pay exactly pro rata, nothing executes early or twice).
+- `cd agent && npm ci && npm test`: 48 tests. Agent decisions and retries, note hashing, rules, the swarm simulation, the market agent and its 20-agent simulation, the guard refusing any key broader than an agent key, and verify.mjs against a stand-in for mainnet with four planted faults it must catch.
+- `cd tests/page && npm install && npx playwright install chromium && npm test`: 9 tests of the demo page in headless Chromium.
+- `cd contracts/vault && cargo test --lib`: 82 tests, two of them property tests (shares add up, books balance per token, exits pay exactly pro rata less what is held back for spends the leaver approved, bid funds add up, nothing executes early or twice).
 - `cargo test --test sputnik_flow`, `cargo test --test swarm_scenario -- --nocapture`: sandbox tests with the real Sputnik DAO code, real proposals and votes, five separate agent processes.
 - GitHub Actions: `.github/workflows/ci.yml` runs the agent, page, contract and sandbox tests on every push; `watch.yml` runs verify.mjs against mainnet every hour; `guard.yml` keeps Ben's and Cara's agents watching vault2 around the clock.
 
 ## Code map
 
 - [contracts/vault/src/lib.rs](https://github.com/QijomoFav35/Dissent-Finance/blob/main/contracts/vault/src/lib.rs): the vault: join, set_rules, queue_spend (DAO only, after reading the DAO's own proposal back), exit, cancel_spend, execute_spend, claims, the event record, the ledger.
+- [contracts/vault/src/market.rs](https://github.com/QijomoFav35/Dissent-Finance/blob/main/contracts/vault/src/market.rs): the share market: bid funds, offer_shares, bid, settle_offer, withdraw_offer; a sale moves shares and USDC between members, never touches the fund, and cannot happen around a spend (no offers while one is open; an offer during which one was queued ends unsold).
 - [contracts/vault/src/checks.rs](https://github.com/QijomoFav35/Dissent-Finance/blob/main/contracts/vault/src/checks.rs): the byte-for-byte check of the DAO proposal against the queued spend.
 - [contracts/vault/src/tests.rs](https://github.com/QijomoFav35/Dissent-Finance/blob/main/contracts/vault/src/tests.rs), [prop_tests.rs](https://github.com/QijomoFav35/Dissent-Finance/blob/main/contracts/vault/src/prop_tests.rs): unit and property tests.
 - [contracts/vault/tests/](https://github.com/QijomoFav35/Dissent-Finance/tree/main/contracts/vault/tests): sandbox tests; `res/sputnikdao2.wasm` is the DAO code the mainnet factory deploys.
 - [agent/src/agent.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/agent.js): the exit agent: reads open spends, applies the member's rules, writes a note, exits with its hash, cancels an unaffordable spend.
 - [agent/src/rules.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/rules.js), [note.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/note.js), [watch.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/watch.js): rules, canonical note hashing, the watcher (one process per member key).
+- [agent/src/market.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/market.js), [agent/sim/market.js](https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/sim/market.js): the market agent (values shares, bids the least that leads up to its member's limit, settles ended offers) and the 20-agent auction simulation.
 - [agent/mainnet/](https://github.com/QijomoFav35/Dissent-Finance/tree/main/agent/mainnet): the mainnet scripts, `evidence.jsonl` (every transaction), the published notes, `verify.mjs`, `guard.mjs`.
 - [docs/index.html](https://github.com/QijomoFav35/Dissent-Finance/blob/main/docs/index.html): the live page, one file, no build step.
 

@@ -35,6 +35,12 @@ enum Op {
     Settle { ok: bool },
     Claim { who: usize, usdc: bool },
     SetRules { who: usize, bps: u16 },
+    FundBids { who: usize, usdc: u128 },
+    Offer { who: usize, share_bps: u32, reserve: u128 },
+    Bid { who: usize, pick: usize, raise_bps: u32 },
+    SettleOffer { pick: usize },
+    WithdrawOffer { pick: usize },
+    WithdrawFunds { who: usize, usdc: u128 },
 }
 
 fn op() -> impl Strategy<Value = Op> {
@@ -52,7 +58,13 @@ fn op() -> impl Strategy<Value = Op> {
         2 => (0usize..8).prop_map(|pick| Op::Cancel { pick }),
         4 => any::<bool>().prop_map(|ok| Op::Settle { ok }),
         1 => (0..NAMES.len() + OTHERS.len(), any::<bool>()).prop_map(|(who, usdc)| Op::Claim { who, usdc }),
-        1 => (who, 0u16..12_000).prop_map(|(who, bps)| Op::SetRules { who, bps }),
+        1 => (who.clone(), 0u16..12_000).prop_map(|(who, bps)| Op::SetRules { who, bps }),
+        2 => (who.clone(), 1u128..200_000_000).prop_map(|(who, usdc)| Op::FundBids { who, usdc }),
+        2 => (who.clone(), 1u32..12_000, 1u128..150_000_000).prop_map(|(who, share_bps, reserve)| Op::Offer { who, share_bps, reserve }),
+        3 => (who.clone(), 0usize..8, 0u32..3_000).prop_map(|(who, pick, raise_bps)| Op::Bid { who, pick, raise_bps }),
+        2 => (0usize..8).prop_map(|pick| Op::SettleOffer { pick }),
+        1 => (0usize..8).prop_map(|pick| Op::WithdrawOffer { pick }),
+        1 => (who, 0u128..200_000_000).prop_map(|(who, usdc)| Op::WithdrawFunds { who, usdc }),
     ]
 }
 
@@ -98,17 +110,29 @@ impl Harness {
     }
 
     /// What every holder could take out right now.
+    /// Each member's claim on the free balance (money not held back for open spends).
     fn values(&self) -> Vec<(AccountId, u128, u128)> {
         let b = self.v.get_balances();
+        let (fnear, fusdc) = (self.free(Token::Near), self.free(Token::Usdc));
         self.v
             .get_members(0, 100)
             .into_iter()
-            .map(|(a, s)| (a, pro_rata(b.near.0, s.0, b.total_shares.0), pro_rata(b.usdc.0, s.0, b.total_shares.0)))
+            .map(|(a, s)| (a, pro_rata(fnear, s.0, b.total_shares.0), pro_rata(fusdc, s.0, b.total_shares.0)))
             .collect()
     }
 
-    fn approver_of_open(&self, who: &AccountId) -> bool {
-        self.v.get_open_spends().iter().any(|s| s.approvers.contains(who))
+    fn free(&self, t: Token) -> u128 {
+        let l = self.v.get_ledger(t);
+        l.balance.0 - l.held.0
+    }
+
+    fn held_for(&self, id: u64) -> u128 {
+        self.v.get_holds(id).iter().map(|(_, a)| a.0).sum()
+    }
+
+    /// The spend and its fee are covered by the free balance plus what is held back for it.
+    fn payable(&self, s: &Spend) -> bool {
+        s.amount.0 + fee_for(s.amount.0) <= self.free(s.token) + self.held_for(s.id)
     }
 
     fn expect_panic<F: FnOnce(&mut Vault)>(&mut self, f: F) -> Result<(), TestCaseError> {
@@ -223,13 +247,38 @@ impl Harness {
                 let who = acc(NAMES[who]);
                 self.at(&who, 0);
                 let owned = self.shares(&who);
-                if owned == 0 || self.approver_of_open(&who) {
-                    // Invariant 6: an approver of an open spend cannot exit.
+                if owned == 0 {
                     return self.expect_panic(|v| v.exit(None));
                 }
                 let b = self.v.get_balances();
-                let want_near = pro_rata(b.near.0, owned, b.total_shares.0);
-                let want_usdc = pro_rata(b.usdc.0, owned, b.total_shares.0);
+                // The model of exit: a share of the free balance, less this member's part of what
+                // earlier holds do not yet cover for each open spend they approved (rounded up).
+                let mut want = [0u128; 2];
+                let mut parts = 0usize;
+                // Whether the leaver's share ran out before covering every spend they approved.
+                let mut capped = false;
+                for (i, t) in [Token::Near, Token::Usdc].into_iter().enumerate() {
+                    let mut left = pro_rata(self.free(t), owned, b.total_shares.0);
+                    for s in self.v.get_open_spends() {
+                        if s.token != t || !s.approvers.contains(&who) {
+                            continue;
+                        }
+                        let uncovered = (s.amount.0 + fee_for(s.amount.0)).saturating_sub(self.held_for(s.id));
+                        let needed = try_mul_div_ceil(uncovered, owned, b.total_shares.0).unwrap_or(uncovered);
+                        capped |= needed > left;
+                        let part = needed.min(left);
+                        if part > 0 {
+                            parts += 1;
+                        }
+                        left -= part;
+                    }
+                    want[i] = left;
+                }
+                let [want_near, want_usdc] = want;
+                prop_assert_eq!(self.v.get_exit_quote(who.clone()), (U128(want_near), U128(want_usdc)));
+                let approved: Vec<_> = self.v.get_open_spends().into_iter().filter(|s| s.approvers.contains(&who)).collect();
+                let affordable_before: Vec<bool> = approved.iter().map(|s| self.payable(s)).collect();
+                let holds_before: usize = self.v.get_open_spends().iter().map(|s| self.v.get_holds(s.id).len()).sum();
                 let exited = [self.v.get_ledger(Token::Near).exited.0, self.v.get_ledger(Token::Usdc).exited.0];
                 let before = self.values();
                 self.v.exit(Some("h".into()));
@@ -237,6 +286,15 @@ impl Harness {
                 prop_assert_eq!(self.v.get_ledger(Token::Near).exited.0 - exited[0], want_near);
                 prop_assert_eq!(self.v.get_ledger(Token::Usdc).exited.0 - exited[1], want_usdc);
                 prop_assert_eq!(self.shares(&who), 0);
+                // Invariant 6: every spend the leaver approved that the vault could pay, it still can,
+                // unless the leaver approved more than their whole share could cover.
+                for (s, was) in approved.iter().zip(affordable_before) {
+                    if was && !capped {
+                        prop_assert!(self.payable(s), "spend {} became unpayable when an approver left", s.id);
+                    }
+                }
+                let holds_after: usize = self.v.get_open_spends().iter().map(|s| self.v.get_holds(s.id).len()).sum();
+                prop_assert_eq!(holds_after, holds_before + parts);
                 // Nobody who stays loses value because someone left.
                 let after: BTreeMap<_, _> = self.values().into_iter().map(|(a, n, u)| (a, (n, u))).collect();
                 for (a, n, u) in before {
@@ -256,7 +314,7 @@ impl Harness {
                 let id = (pick % n) as u64;
                 let s = self.v.get_spend(id).unwrap();
                 let bal = self.v.get_ledger(s.token).balance.0;
-                let affordable = s.amount.0 + fee_for(s.amount.0) <= bal;
+                let affordable = self.payable(&s);
                 self.at(&acc("anyone.near"), 0);
                 if s.status != SpendStatus::Queued || self.now < s.window_ends.0 || !affordable {
                     // Invariant 5: never before the window closes, never twice, never unaffordable.
@@ -273,13 +331,168 @@ impl Harness {
                 }
                 let id = (pick % n) as u64;
                 let s = self.v.get_spend(id).unwrap();
-                let affordable = s.amount.0 + fee_for(s.amount.0) <= self.v.get_ledger(s.token).balance.0;
+                let affordable = self.payable(&s);
                 self.at(&acc("anyone.near"), 0);
                 if s.status != SpendStatus::Queued || affordable {
                     return self.expect_panic(|v| v.cancel_spend(id));
                 }
+                let holds = self.v.get_holds(id);
+                let claims_before: Vec<u128> = holds.iter().map(|(a, _)| { let c = self.v.get_claimable(a.clone()); if s.token == Token::Near { c.0 .0 } else { c.1 .0 } }).collect();
+                let bal = self.v.get_ledger(s.token).balance.0;
                 self.v.cancel_spend(id);
                 prop_assert_eq!(self.v.get_spend(id).unwrap().status, SpendStatus::Cancelled);
+                // Whatever was held back for it goes back to the members who left, as claimable.
+                let total: u128 = holds.iter().map(|(_, a)| a.0).sum();
+                prop_assert_eq!(self.v.get_ledger(s.token).balance.0, bal - total);
+                prop_assert!(self.v.get_holds(id).is_empty());
+                let mut seen = BTreeMap::new();
+                for ((a, amt), before) in holds.iter().zip(claims_before) {
+                    *seen.entry(a.clone()).or_insert(before) += amt.0;
+                }
+                for (a, want) in seen {
+                    let c = self.v.get_claimable(a);
+                    prop_assert_eq!(if s.token == Token::Near { c.0 .0 } else { c.1 .0 }, want);
+                }
+            }
+            Op::FundBids { who, usdc } => {
+                let who = acc(NAMES[who]);
+                let before = self.v.get_bid_funds(who.clone()).0;
+                let holder = self.shares(&who) > 0;
+                self.at(&acc("usdc.near"), 0);
+                let back = match self.v.ft_on_transfer(who.clone(), U128(usdc), "bid_funds".into()) {
+                    PromiseOrValue::Value(r) => r.0,
+                    _ => unreachable!(),
+                };
+                if holder && usdc >= market::MIN_BID_FUNDS {
+                    prop_assert_eq!(back, 0);
+                    prop_assert_eq!(self.v.get_bid_funds(who).0, before + usdc);
+                } else {
+                    // Outsiders and dust get everything back.
+                    prop_assert_eq!(back, usdc);
+                    prop_assert_eq!(self.v.get_bid_funds(who).0, before);
+                }
+            }
+            Op::Offer { who, share_bps, reserve } => {
+                let who = acc(NAMES[who]);
+                let owned = self.shares(&who);
+                let shares = owned * share_bps as u128 / 10_000;
+                let open = self.v.get_open_offers();
+                self.at(&who, 0);
+                if owned == 0 || shares == 0 || shares > owned || open.len() >= market::MAX_OPEN_OFFERS || open.iter().any(|o| o.seller == who) || !self.v.get_open_spends().is_empty() {
+                    return self.expect_panic(|v| { v.offer_shares(U128(shares), U128(reserve)); });
+                }
+                let before = self.v.get_balances();
+                let id = self.v.offer_shares(U128(shares), U128(reserve));
+                let o = self.v.get_offer(id).unwrap();
+                prop_assert_eq!(o.ends_at.0, self.now + WINDOW);
+                let after = self.v.get_balances();
+                prop_assert_eq!((after.usdc.0, after.near.0, after.total_shares.0), (before.usdc.0, before.near.0, before.total_shares.0));
+            }
+            Op::Bid { who, pick, raise_bps } => {
+                let open = self.v.get_open_offers();
+                if open.is_empty() {
+                    return Ok(());
+                }
+                let o = open[pick % open.len()].clone();
+                let who = acc(NAMES[who]);
+                let min = if o.bids == 0 { o.reserve.0 } else { o.best_bid.0 + (o.best_bid.0 / 100).max(1) };
+                let amount = min + min * raise_bps as u128 / 10_000;
+                let mut funds = self.v.get_bid_funds(who.clone()).0;
+                if o.best_bidder.as_ref() == Some(&who) {
+                    funds += o.best_bid.0;
+                }
+                self.at(&who, 0);
+                if self.shares(&who) == 0 || o.seller == who || self.now >= o.ends_at.0 || funds < amount {
+                    return self.expect_panic(|v| v.bid(o.id, U128(amount)));
+                }
+                let prev = o.best_bidder.clone().filter(|b| *b != who).map(|b| (b.clone(), self.v.get_bid_funds(b).0));
+                let total = self.v.get_bid_funds_totals().0 .0;
+                self.v.bid(o.id, U128(amount));
+                let now = self.v.get_offer(o.id).unwrap();
+                prop_assert_eq!(now.best_bidder, Some(who.clone()));
+                prop_assert_eq!(now.best_bid.0, amount);
+                prop_assert_eq!(self.v.get_bid_funds(who).0, funds - amount);
+                // The beaten bid goes back to its bidder's funds; the total does not move.
+                if let Some((b, before)) = prev {
+                    prop_assert_eq!(self.v.get_bid_funds(b).0, before + o.best_bid.0);
+                }
+                prop_assert_eq!(self.v.get_bid_funds_totals().0 .0, total);
+            }
+            Op::SettleOffer { pick } => {
+                let open = self.v.get_open_offers();
+                if open.is_empty() {
+                    return Ok(());
+                }
+                let o = open[pick % open.len()].clone();
+                self.at(&acc("anyone.near"), 0);
+                if self.now < o.ends_at.0 {
+                    return self.expect_panic(|v| v.settle_offer(o.id));
+                }
+                // A spend queued since the offer was made ends it unsold, open spend or not.
+                let made_at = o.ends_at.0 - WINDOW;
+                let mut all = Vec::new();
+                loop {
+                    let page = self.v.get_spends(all.len() as u32, 100);
+                    let short = page.len() < 100;
+                    all.extend(page);
+                    if short { break; }
+                }
+                let spend_since = all.last().map(|sp| sp.queued_at.0 >= made_at).unwrap_or(false);
+                if spend_since {
+                    let funds = o.best_bidder.as_ref().map(|b| self.v.get_bid_funds(b.clone()).0);
+                    let seller_before = self.shares(&o.seller);
+                    self.v.settle_offer(o.id);
+                    prop_assert!(self.v.get_offer(o.id).is_none());
+                    prop_assert_eq!(self.shares(&o.seller), seller_before);
+                    if let (Some(b), Some(f)) = (&o.best_bidder, funds) {
+                        prop_assert_eq!(self.v.get_bid_funds(b.clone()).0, f + o.best_bid.0);
+                    }
+                    return Ok(());
+                }
+                if !self.v.get_open_spends().is_empty() {
+                    return self.expect_panic(|v| v.settle_offer(o.id));
+                }
+                let before = self.v.get_balances();
+                let seller_before = self.shares(&o.seller);
+                let buyer_before = o.best_bidder.as_ref().map(|b| self.shares(b)).unwrap_or(0);
+                self.v.settle_offer(o.id);
+                let after = self.v.get_balances();
+                // The fund never changes in a sale: same money, same total of shares.
+                prop_assert_eq!((after.usdc.0, after.near.0, after.total_shares.0), (before.usdc.0, before.near.0, before.total_shares.0));
+                match &o.best_bidder {
+                    Some(b) => {
+                        prop_assert_eq!(self.v.get_offer(o.id).unwrap().status, OfferStatus::Sold);
+                        prop_assert_eq!(self.shares(&o.seller), seller_before - o.shares.0);
+                        prop_assert_eq!(self.shares(b), buyer_before + o.shares.0);
+                    }
+                    None => {
+                        prop_assert!(self.v.get_offer(o.id).is_none());
+                        prop_assert_eq!(self.shares(&o.seller), seller_before);
+                    }
+                }
+            }
+            Op::WithdrawOffer { pick } => {
+                let open = self.v.get_open_offers();
+                if open.is_empty() {
+                    return Ok(());
+                }
+                let o = open[pick % open.len()].clone();
+                self.at(&o.seller, 0);
+                if o.bids > 0 {
+                    return self.expect_panic(|v| v.withdraw_offer(o.id));
+                }
+                self.v.withdraw_offer(o.id);
+                prop_assert!(self.v.get_offer(o.id).is_none());
+            }
+            Op::WithdrawFunds { who, usdc } => {
+                let who = acc(NAMES[who]);
+                let have = self.v.get_bid_funds(who.clone()).0;
+                self.at(&who, 0);
+                if usdc == 0 || usdc > have {
+                    return self.expect_panic(|v| v.withdraw_bid_funds(U128(usdc)));
+                }
+                self.v.withdraw_bid_funds(U128(usdc));
+                prop_assert_eq!(self.v.get_bid_funds(who).0, have - usdc);
             }
             Op::Settle { ok } => {
                 let next = SENT.with(|s| {
@@ -357,8 +570,15 @@ impl Harness {
                 .sum();
             prop_assert_eq!(l.claimable.0, claims, "{:?} claimable drifted", token);
             // 4. Money leaves only through the paths we count: holdings plus deliveries equal deposits.
-            let held = l.balance.0 + l.pending_joins.0 + l.in_flight.0 + l.claimable.0;
-            prop_assert_eq!(held + self.delivered[ti(token)], l.deposited.0, "{:?} money left by an uncounted path", token);
+            // Bid funds sit outside the fund: count what members hold there and what they put in.
+            let (bids_held, bids_in) = if token == Token::Usdc {
+                let (t, i) = self.v.get_bid_funds_totals();
+                (t.0, i.0)
+            } else {
+                (0, 0)
+            };
+            let held = l.balance.0 + l.pending_joins.0 + l.in_flight.0 + l.claimable.0 + bids_held;
+            prop_assert_eq!(held + self.delivered[ti(token)], l.deposited.0 + bids_in, "{:?} money left by an uncounted path", token);
         }
         // 5. Executed spends ran at or after their window closed.
         for (id, t) in &self.executed_at {
@@ -366,13 +586,34 @@ impl Harness {
             prop_assert_eq!(s.status, SpendStatus::Executed);
             prop_assert!(*t >= s.window_ends.0, "spend {} executed early", id);
         }
-        // 6. Every approver of an open spend still holds shares.
-        for s in self.v.get_open_spends() {
-            for a in &s.approvers {
-                prop_assert!(self.shares(a) > 0, "approver {} left while spend {} was open", a, s.id);
+        prop_assert_eq!(b.open_spends as usize, self.v.get_open_spends().len());
+        // 7. Bid funds: the total is every member's free funds plus the best bids locked in open offers,
+        // and every open offer's seller still holds the shares on offer.
+        let everyone: Vec<AccountId> = NAMES.iter().chain(OTHERS.iter()).map(|n| acc(n)).collect();
+        let free: u128 = everyone.iter().map(|a| self.v.get_bid_funds(a.clone()).0).sum();
+        let locked: u128 = self.v.get_open_offers().iter().map(|o| o.best_bid.0).sum();
+        prop_assert_eq!(self.v.get_bid_funds_totals().0 .0, free + locked, "bid funds drifted");
+        prop_assert!(self.v.get_open_offers().len() <= market::MAX_OPEN_OFFERS);
+        for o in self.v.get_open_offers() {
+            prop_assert!(self.shares(&o.seller) >= o.shares.0, "offer {} sells shares its seller no longer holds", o.id);
+            if let Some(b) = &o.best_bidder {
+                prop_assert!(self.shares(b) > 0, "offer {}'s best bidder holds no shares", o.id);
             }
         }
-        prop_assert_eq!(b.open_spends as usize, self.v.get_open_spends().len());
+        // 6. Held-back money: it sits inside the balance, it adds up to the open spends' holds, and
+        // settled spends hold nothing.
+        let open: Vec<u64> = self.v.get_open_spends().iter().map(|s| s.id).collect();
+        for token in [Token::Near, Token::Usdc] {
+            let l = self.v.get_ledger(token);
+            prop_assert!(l.held.0 <= l.balance.0, "{:?} holds exceed the balance", token);
+            let sum: u128 = self.v.get_open_spends().iter().filter(|s| s.token == token).map(|s| self.held_for(s.id)).sum();
+            prop_assert_eq!(l.held.0, sum, "{:?} held total drifted", token);
+        }
+        for s in self.v.get_spends(0, 100) {
+            if !open.contains(&s.id) {
+                prop_assert!(self.v.get_holds(s.id).is_empty(), "settled spend {} still holds money", s.id);
+            }
+        }
         Ok(())
     }
 }

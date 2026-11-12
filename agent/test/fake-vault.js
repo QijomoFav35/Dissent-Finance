@@ -69,11 +69,17 @@ export class FakeVault {
   exit(account) {
     const s = this.holdings.get(account) ?? 0n;
     if (s === 0n) return { ok: false, failure: "ERR_NO_SHARES" };
-    if (this.spends.some((sp) => sp.status === "Queued" && sp.approvers.includes(account))) {
-      return { ok: false, failure: "ERR_APPROVED_SPEND_PENDING" };
+    // Like the vault: an approver can leave, but their part of each open spend they approved stays
+    // behind for it (rounded up). The fake keeps it in the balance; the real vault also ring-fences it.
+    let n = (this.near * s) / this.total;
+    let u = (this.usdc * s) / this.total;
+    for (const sp of this.spends) {
+      if (sp.status !== "Queued" || !sp.approvers.includes(account)) continue;
+      const cost = BigInt(sp.amount) + (BigInt(sp.amount) * 10n) / 10_000n;
+      const part = (cost * s + this.total - 1n) / this.total;
+      if (sp.token === "Near") n -= part < n ? part : n;
+      else u -= part < u ? part : u;
     }
-    const n = (this.near * s) / this.total;
-    const u = (this.usdc * s) / this.total;
     this.near -= n;
     this.usdc -= u;
     this.total -= s;

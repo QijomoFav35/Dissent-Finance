@@ -24,4 +24,13 @@ export class VaultReader {
   wasPaid(accountId) {
     return this.rpc.view(this.vaultId, "was_paid", { account_id: accountId });
   }
+  openOffers() {
+    return this.rpc.view(this.vaultId, "get_open_offers");
+  }
+  ledger(token) {
+    return this.rpc.view(this.vaultId, "get_ledger", { token });
+  }
+  async bidFunds(accountId) {
+    return BigInt(await this.rpc.view(this.vaultId, "get_bid_funds", { account_id: accountId }));
+  }
 }

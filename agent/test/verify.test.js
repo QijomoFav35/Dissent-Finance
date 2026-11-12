@@ -25,8 +25,14 @@ test("every check passes on the mainnet state, with v2's key reported as INFO", 
     const { code, out } = await run(mock.url);
     assert.equal(code, 0);
     assert.equal(out.failed, 0);
-    assert.ok(out.results.length >= 19, `expected at least 19 checks, got ${out.results.length}`);
-    assert.deepEqual(out.results.filter((r) => r.status === "INFO").map((r) => r.n), [2]);
+    assert.ok(out.results.length >= 22, `expected at least 22 checks, got ${out.results.length}`);
+    // INFO, not PASS or FAIL: v2's key, the DAO's auto-update, and the market checks on code from before the market.
+    const info = out.results.filter((r) => r.status === "INFO").map((r) => r.what);
+    assert.equal(info.length, 4);
+    assert.match(info[0], /still has 1 access key/);
+    assert.match(info[1], /auto-update is on/);
+    assert.match(info[2], /before held-back exits/);
+    assert.match(info[3], /before the share market/);
     assert.ok(out.results.some((r) => /runs DtHZA1/.test(r.what) && r.status === "PASS"), "the DAO code check");
     assert.ok(out.results.some((r) => /sandbox tests deploy/.test(r.what) && r.status === "PASS"), "the sandbox bytes check");
   } finally {
@@ -44,6 +50,35 @@ test("a widened agent key, a wrong note hash and unbalanced books each fail thei
     assert.match(failed[0], /cara\.dissentfinance\.near/);
     assert.match(failed[1], /^dan: the exit carries/);
     assert.match(failed[2], /^NEAR books/);
+  } finally {
+    mock.close();
+  }
+});
+
+test("after the third run: the DAO lock, rejoined leavers, market keys and a share sale all pass", async () => {
+  const mock = await startMock({ round3: true });
+  try {
+    const { code, out } = await run(mock.url);
+    assert.equal(code, 0, JSON.stringify(out.results.filter((r) => r.status === "FAIL")));
+    const by = (re) => out.results.find((r) => re.test(r.what));
+    assert.equal(by(/auto-update is off/).status, "PASS");
+    assert.match(by(/agent key on their own account/).what, /4 market key\(s\) can call only bid/);
+    assert.match(by(/members who left/).what, /3 did, after the cancel/);
+    assert.equal(by(/held back for open spends/).status, "PASS");
+    assert.match(by(/share sale/).what, /offer 0: cara to dan for 0\.097 USDC after 3 bids/);
+    assert.match(by(/USDC contract says/).what, /300000 of it bid funds/);
+    assert.deepEqual(out.results.filter((r) => r.status === "INFO").map((r) => r.n), [2]);
+  } finally {
+    mock.close();
+  }
+});
+
+test("a sale below its reserve fails the market check", async () => {
+  const mock = await startMock({ round3: true, sale: "below" });
+  try {
+    const { code, out } = await run(mock.url);
+    assert.equal(code, 1);
+    assert.match(out.results.find((r) => r.status === "FAIL").what, /share sale/);
   } finally {
     mock.close();
   }
