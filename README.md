@@ -1,5 +1,7 @@
 # Dissent Finance
 
+Live page, read from mainnet in your browser: https://qijomofav35.github.io/Dissent-Finance/
+
 A vault for a group's money that sits next to an unchanged Sputnik DAO on NEAR. When the DAO approves a spend from the vault, the spend waits for a fixed window, and any member who did not vote for it can take their share out first. Each member can run an agent that does this for them, using a key that can only call `exit` and `cancel_spend`.
 
 If enough members leave that the vault can no longer pay the spend, anyone can cancel it.

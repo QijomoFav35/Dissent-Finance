@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dissent Finance</title>
+<meta name="description" content="A NEAR group fund where members who did not approve a spend can leave with their share before it pays. Read live from mainnet.">
+<style>
+  :root {
+    --bg: #f6f5f1; --panel: #ffffff; --ink: #1b1d1f; --muted: #626a70; --line: #e2e0d9;
+    --accent: #1f5f4a; --accent-soft: #e3efe9; --warn: #8a3b12; --warn-soft: #f6e7dd; --stay: #2f4a7a; --stay-soft: #e4eaf5;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121416; --panel: #1a1d20; --ink: #e9e7e1; --muted: #9aa3a9; --line: #2b3034;
+      --accent: #7fc4a6; --accent-soft: #1d2f28; --warn: #f0a37a; --warn-soft: #33241c; --stay: #9db7e6; --stay-soft: #1e2636;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121416; --panel: #1a1d20; --ink: #e9e7e1; --muted: #9aa3a9; --line: #2b3034;
+    --accent: #7fc4a6; --accent-soft: #1d2f28; --warn: #f0a37a; --warn-soft: #33241c; --stay: #9db7e6; --stay-soft: #1e2636;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 2rem; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 1.15rem; margin: 40px 0 12px; }
+  p { margin: 0 0 12px; }
+  a { color: var(--accent); }
+  .lede { font-size: 1.08rem; color: var(--muted); max-width: 46em; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .stat .k { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat .v { font-size: 1.05rem; margin-top: 2px; word-break: break-word; }
+  .mono { font-family: var(--mono); font-size: 0.86rem; }
+  .ok { color: var(--accent); font-weight: 600; }
+  .bad { color: var(--warn); font-weight: 600; }
+  .pending { color: var(--muted); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 0.8rem; font-weight: 600; }
+  .pill.exit { background: var(--warn-soft); color: var(--warn); }
+  .pill.stay { background: var(--stay-soft); color: var(--stay); }
+  .pill.done { background: var(--accent-soft); color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.93rem; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .scroll { overflow-x: auto; }
+  .notes { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .note h3 { margin: 0 0 6px; font-size: 1rem; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .note ul { margin: 6px 0 10px; padding-left: 18px; }
+  .note .hash { font-family: var(--mono); font-size: 0.78rem; word-break: break-all; color: var(--muted); }
+  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; font-size: 0.82rem; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 0.88rem; color: var(--muted); margin: 18px 0 0; }
+  .bar button { font: inherit; background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+  #error { display: none; margin-top: 16px; }
+  #error.show { display: block; }
+  .timeline td:first-child { white-space: nowrap; color: var(--muted); font-family: var(--mono); font-size: 0.82rem; }
+  footer { margin-top: 48px; color: var(--muted); font-size: 0.88rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Dissent Finance</h1>
+  <p class="lede">A vault for a group's money that sits next to an unchanged Sputnik DAO on NEAR. When the DAO approves a spend, it waits for a fixed window, and anyone who did not vote for it can leave with their share first. Each member's agent does this for them, using a key that can only call <code>exit</code> and <code>cancel_spend</code>.</p>
+  <p class="lede">Everything below is read from NEAR mainnet by your browser as the page loads. The agents' notes come from the public repo and are hashed here, then matched against the hashes the exits carried on chain.</p>
+
+  <div class="bar">
+    <span id="status" class="pending">Reading mainnet…</span>
+    <button id="reload" type="button">Read again</button>
+    <span>Source: <a href="https://github.com/QijomoFav35/Dissent-Finance">github.com/QijomoFav35/Dissent-Finance</a></span>
+  </div>
+  <div id="error" class="panel bad"></div>
+
+  <h2>The vault</h2>
+  <div class="grid">
+    <div class="panel stat"><div class="k">Account</div><div class="v mono"><a href="https://nearblocks.io/address/vault.dissentfinance.near">vault.dissentfinance.near</a></div></div>
+    <div class="panel stat"><div class="k">Access keys</div><div class="v" id="keys">…</div></div>
+    <div class="panel stat"><div class="k">Code</div><div class="v" id="code">…</div></div>
+    <div class="panel stat"><div class="k">Holds now</div><div class="v" id="holds">…</div></div>
+  </div>
+
+  <h2>Spend 0</h2>
+  <div class="panel" id="spend">…</div>
+
+  <h2>What happened, from the vault's own record</h2>
+  <div class="panel scroll"><table class="timeline"><thead><tr><th>Time (UTC)</th><th>Event</th><th>Detail</th></tr></thead><tbody id="timeline"><tr><td colspan="3" class="pending">…</td></tr></tbody></table></div>
+
+  <h2>The agents' notes</h2>
+  <p>Each agent wrote a note before acting: the rules it checked, the numbers, and its decision. An exit sends the note's SHA-256 as <code>reason_hash</code>. This page recomputes every hash from the published note.</p>
+  <div class="notes" id="notes"><div class="panel pending">…</div></div>
+
+  <h2>Members now</h2>
+  <div class="panel scroll"><table><thead><tr><th>Member</th><th>Shares in the vault</th><th>USDC in their wallet</th></tr></thead><tbody id="members"><tr><td colspan="3" class="pending">…</td></tr></tbody></table></div>
+
+  <h2>Check it without this page</h2>
+  <p>With <code>near</code> CLI. None of these need an account.</p>
+<pre>near contract verify deployed-at vault.dissentfinance.near network-config mainnet now
+near account view-account-summary vault.dissentfinance.near network-config mainnet now
+near contract call-function as-read-only vault.dissentfinance.near get_spend json-args '{"spend_id":0}' network-config mainnet now
+near contract call-function as-read-only vault.dissentfinance.near get_record json-args '{"from_index":0,"limit":100}' network-config mainnet now</pre>
+
+  <footer>Data from NEAR mainnet RPC and raw.githubusercontent.com. No wallet, no tracking, no build step: view the source of this page to see every call it makes.</footer>
+</main>
+
+<script>
+const VAULT = "vault.dissentfinance.near";
+const DAO = "dissentfinance.sputnik-dao.near";
+const USDC = "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
+const VERIFIED_CODE = "3jWHECjP5BCezXDBPR1XuQzb62KpBYaKZzhMXbmoHtWN";
+const MEMBERS = ["alice", "ben", "cara", "dan", "emma"].map((m) => `${m}.dissentfinance.near`);
+const RAW = "https://raw.githubusercontent.com/QijomoFav35/Dissent-Finance/main/agent/mainnet";
+const RPCS = ["https://free.rpc.fastnear.com", "https://rpc.mainnet.near.org", "https://near.drpc.org", "https://rpc.intea.rs"];
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const short = (a) => esc(String(a).replace(".dissentfinance.near", ""));
+const usdc = (u) => (Number(BigInt(u)) / 1e6).toFixed(2);
+const near = (y) => (Number(BigInt(y) / 10n ** 20n) / 1e4).toFixed(2);
+const tx = (h) => `<a class="mono" href="https://nearblocks.io/txns/${esc(h)}">${esc(h.slice(0, 8))}</a>`;
+const when = (ns) => new Date(Number(BigInt(ns) / 1_000_000n)).toISOString().replace("T", " ").slice(0, 19);
+
+async function rpc(method, params) {
+  let last;
+  for (const url of RPCS) {
+    try {
+      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: "page", method, params }) });
+      const j = await r.json();
+      if (j.error) throw new Error(JSON.stringify(j.error).slice(0, 200));
+      if (j.result?.error) throw new Error(j.result.error);
+      return j.result;
+    } catch (e) { last = e; }
+  }
+  throw last;
+}
+const query = (p) => rpc("query", { finality: "final", ...p });
+async function view(account, method, args = {}) {
+  const r = await query({ request_type: "call_function", account_id: account, method_name: method, args_base64: btoa(JSON.stringify(args)) });
+  const text = new TextDecoder().decode(new Uint8Array(r.result));
+  return text ? JSON.parse(text) : null;
+}
+
+// The same canonical JSON the agent hashes (agent/src/note.js): keys sorted at every level.
+function canonical(v) {
+  if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
+  if (v && typeof v === "object") return `{${Object.keys(v).sort().filter((k) => v[k] !== undefined).map((k) => `${JSON.stringify(k)}:${canonical(v[k])}`).join(",")}}`;
+  return JSON.stringify(v);
+}
+async function sha256(text) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function describeRule(c) {
+  if (c.rule === "max_spend_share_bps") return `Leave if one spend takes more than ${c.limit / 100}% of the fund. This one takes ${c.value / 100}%.`;
+  if (c.rule === "new_recipient") return `Leave if the receiver was never paid by the vault before. ${c.value === "never paid" ? "This one never was." : "This one was."}`;
+  if (c.rule === "blocked_recipients") return `Leave if the receiver is on the blocked list (${(c.limit || []).map(short).join(", ")}). This one goes to ${short(c.value)}.`;
+  if (c.rule === "approved") return `Voted Approve, so the vault would refuse an exit until the spend settles.`;
+  return esc(JSON.stringify(c));
+}
+
+async function load() {
+  $("status").className = "pending";
+  $("status").textContent = "Reading mainnet…";
+  $("error").className = "panel bad";
+  try {
+    const [account, keys, balances, spend, proposal, len, evidenceText] = await Promise.all([
+      query({ request_type: "view_account", account_id: VAULT }),
+      query({ request_type: "view_access_key_list", account_id: VAULT }),
+      view(VAULT, "get_balances"),
+      view(VAULT, "get_spend", { spend_id: 0 }),
+      view(DAO, "get_proposal", { id: 0 }),
+      view(VAULT, "get_record_len"),
+      fetch(`${RAW}/evidence.jsonl`).then((r) => (r.ok ? r.text() : "")).catch(() => ""),
+    ]);
+    const record = (await view(VAULT, "get_record", { from_index: 0, limit: Math.min(len, 100) })).map((s) => JSON.parse(s));
+    const evidence = evidenceText.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+    const txFor = {};
+    for (const e of evidence) {
+      if (e.step === "join") txFor[`join:${e.account}`] = e.tx;
+      if (e.step === "propose") txFor.propose = e.tx;
+      if (e.step === "vote") txFor[`vote:${e.voter}`] = e.tx;
+      if (e.step === "exits_and_cancel") {
+        txFor["exit:emma.dissentfinance.near"] = e.emma_exit;
+        txFor["exit:dan.dissentfinance.near"] = e.dan_exit;
+        txFor["exit:alice.dissentfinance.near"] = e.alice_exit;
+        txFor.cancel = e.cara_cancel;
+      }
+      if (e.step === "deploy_vault") txFor.deploy = e.tx;
+    }
+
+    // ---------- the vault ----------
+    const nKeys = keys.keys.length;
+    $("keys").innerHTML = nKeys === 0 ? `<span class="ok">None.</span> Nobody can change the code or move funds outside its rules.` : `<span class="bad">${nKeys} key(s)</span>`;
+    const codeOk = account.code_hash === VERIFIED_CODE;
+    $("code").innerHTML = `${codeOk ? '<span class="ok">Matches the verified build</span>' : '<span class="bad">Does not match the verified build</span>'}<div class="mono">${esc(account.code_hash)}</div><div style="font-size:.85rem"><a href="https://github.com/QijomoFav35/Dissent-Finance/tree/54ccf1b24c629e86ba1cb5d87b9ac80f3eb64f39/contracts/vault">source at commit 54ccf1b</a></div>`;
+    $("holds").innerHTML = `${usdc(balances.usdc)} USDC and ${near(balances.near)} NEAR<div style="font-size:.85rem;color:var(--muted)">for ${balances.members} members, ${balances.open_spends} spend(s) open</div>`;
+
+    // ---------- spend 0 and the DAO's own record of the vote ----------
+    let fundAtQueue = 0n;
+    for (const ev of record) {
+      if (ev.event === "queue_spend" && ev.data?.[0]?.spend_id === 0) break;
+      if (ev.event === "join") fundAtQueue += BigInt(ev.data[0].usdc);
+    }
+    const votes = proposal.votes || {};
+    const approvers = Object.keys(votes).filter((a) => votes[a] === "Approve");
+    const silent = MEMBERS.filter((m) => !(m in votes));
+    $("spend").innerHTML = `
+      <p><strong>${usdc(spend.amount)} USDC to ${short(spend.recipient)}</strong>, ${fundAtQueue ? `${Math.round(Number((BigInt(spend.amount) * 1000n) / fundAtQueue) / 10)}% of the ${usdc(fundAtQueue)} USDC the vault held when it was queued` : ""}.
+      Status: <span class="pill ${spend.status === "Cancelled" ? "done" : "stay"}">${esc(spend.status)}</span></p>
+      <p>Approved in the DAO by ${approvers.map(short).join(" and ")} (DAO proposal 0 is ${esc(proposal.status)}${txFor.propose ? `, filed in ${tx(txFor.propose)}` : ""}). ${silent.map(short).join(", ")} did not vote.</p>
+      <p style="color:var(--muted);margin:0">The vault read this proposal back from <span class="mono">${DAO}</span> and queued it only because the DAO's record matched the call byte for byte. Its window would have closed at ${when(spend.window_ends)} UTC.</p>`;
+
+    // ---------- timeline from the vault's record ----------
+    const rows = [];
+    for (const ev of record) {
+      const d = ev.data?.[0] ?? {};
+      const at = when(ev.ts);
+      if (ev.event === "pending_deposit") rows.push([at, "deposit", `${short(d.account_id)} sent ${usdc(d.usdc)} USDC to join`]);
+      else if (ev.event === "join") rows.push([at, "join", `${short(d.account_id)} put in ${near(d.near)} NEAR and ${usdc(d.usdc)} USDC${txFor[`join:${d.account_id}`] ? ` ${tx(txFor[`join:${d.account_id}`])}` : ""}`]);
+      else if (ev.event === "set_rules") rows.push([at, "rules", `${short(d.account_id)} set exit rules`]);
+      else if (ev.event === "queue_spend") rows.push([at, "<strong>spend queued</strong>", `${usdc(d.amount)} USDC to ${short(d.recipient)}, ${d.approve} approved, ${d.not_approve} voted against${txFor["vote:cara.dissentfinance.near"] ? `. Approving vote: ${tx(txFor["vote:cara.dissentfinance.near"])}` : ""}`]);
+      else if (ev.event === "exit") rows.push([at, '<span class="pill exit">exit</span>', `${short(d.account_id)} left with ${usdc(d.usdc)} USDC and ${near(d.near)} NEAR, note hash <span class="mono">${esc((d.reason_hash || "").slice(0, 12))}…</span>${txFor[`exit:${d.account_id}`] ? ` ${tx(txFor[`exit:${d.account_id}`])}` : ""}`]);
+      else if (ev.event === "cancel_spend") rows.push([at, '<span class="pill done">cancelled</span>', `spend ${d.spend_id} cancelled by ${short(d.by)}'s agent: the vault could no longer pay it${txFor.cancel ? ` ${tx(txFor.cancel)}` : ""}`]);
+      else rows.push([at, esc(ev.event), `<span class="mono">${esc(JSON.stringify(d)).slice(0, 160)}</span>`]);
+    }
+    $("timeline").innerHTML = rows.map(([a, b, c]) => `<tr><td>${a}</td><td>${b}</td><td>${c}</td></tr>`).join("") || '<tr><td colspan="3">No events.</td></tr>';
+    const exitHash = {};
+    for (const ev of record) if (ev.event === "exit") exitHash[ev.data[0].account_id] = ev.data[0].reason_hash;
+
+    // ---------- notes, hashed here ----------
+    const notes = await Promise.all(MEMBERS.map(async (m) => {
+      try {
+        const r = await fetch(`${RAW}/notes/0-${m}.json`);
+        if (!r.ok) return { m, missing: true };
+        const published = await r.json();
+        return { m, published, computed: await sha256(canonical(published.note)) };
+      } catch { return { m, missing: true }; }
+    }));
+    let allMatch = true;
+    $("notes").innerHTML = notes.map(({ m, published, computed, missing }) => {
+      if (missing) { allMatch = false; return `<div class="panel note"><h3>${short(m)}</h3><p class="bad">Note not found in the repo.</p></div>`; }
+      const n = published.note;
+      const onChain = exitHash[m];
+      let match;
+      if (n.decision === "exit") {
+        const ok = onChain === computed;
+        if (!ok) allMatch = false;
+        match = ok ? `<span class="ok">Matches the hash on its exit.</span>` : `<span class="bad">Does not match the hash on chain (${esc(onChain || "no exit found")}).</span>`;
+      } else {
+        match = `<span style="color:var(--muted)">Stayed, so no exit carries this hash.</span>`;
+      }
+      const checks = (n.checks || []).map((c) => `<li>${describeRule(c)} ${c.broken ? '<span class="bad">Broken.</span>' : ""}</li>`).join("");
+      return `<div class="panel note">
+        <h3>${short(m)} <span class="pill ${n.decision === "exit" ? "exit" : "stay"}">${esc(n.decision)}</span></h3>
+        <ul>${checks || "<li>No rules set.</li>"}</ul>
+        <div class="hash">sha256 computed here: ${computed}</div>
+        <div style="font-size:.88rem;margin-top:6px">${match}</div>
+      </div>`;
+    }).join("");
+
+    // ---------- members now ----------
+    const mrows = await Promise.all(MEMBERS.map(async (m) => {
+      const [sh, held] = await Promise.all([view(VAULT, "get_shares", { account_id: m }), view(USDC, "ft_balance_of", { account_id: m })]);
+      const left = sh === "0";
+      return `<tr><td>${short(m)}</td><td>${left ? '<span class="pill exit">left</span>' : `${esc(sh)} <span class="pill stay">stayed</span>`}</td><td>${usdc(held)}</td></tr>`;
+    }));
+    $("members").innerHTML = mrows.join("");
+
+    $("status").className = codeOk && nKeys === 0 && allMatch ? "ok" : "bad";
+    $("status").textContent = `${codeOk && nKeys === 0 && allMatch ? "Checked" : "Check failed"}: read from mainnet at ${new Date().toISOString().slice(11, 19)} UTC`;
+  } catch (e) {
+    $("status").className = "bad";
+    $("status").textContent = "Could not read mainnet";
+    $("error").className = "panel bad show";
+    $("error").textContent = `Every RPC endpoint failed: ${e?.message ?? e}. Try "Read again" in a minute.`;
+  }
+}
+$("reload").addEventListener("click", load);
+load();
+</script>
+</body>
+</html>
