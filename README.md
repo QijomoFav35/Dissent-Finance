@@ -51,7 +51,7 @@ node agent/mainnet/verify.mjs --vault vault # v1
 near contract verify deployed-at vault2.dissentfinance.near network-config mainnet now   # rebuilds the deployed code (Docker)
 ```
 
-`verify.mjs` reads one final block and checks the vault's code hash against the reproducible build, its access keys, that the DAO runs the factory's unmodified code with auto-update off, that every agent key can call only its two methods, every exit's hash against its published note, the share sale against its reserve, and that the books balance against the USDC contract's own balance. It runs every hour in the `Mainnet verify` workflow.
+`verify.mjs` reads one final block and checks the vault's code hash against the reproducible build, its access keys, that the DAO runs the factory's unmodified code with auto-update off, that every agent key can call only its two methods, every exit's hash against its published note, the share sale against its reserve, and that the books balance against the USDC contract's own balance. The `Mainnet verify` workflow runs it on every push and on an hourly schedule (GitHub runs schedules when it has capacity, so in practice every few hours).
 
 ## Tests
 
@@ -83,7 +83,7 @@ Expected output for each, step by step: [docs/TESTING.md](docs/TESTING.md). CI r
 
 ## Agents on duty
 
-`.github/workflows/guard.yml` keeps agents watching `vault2.dissentfinance.near` around the clock, in hourly shifts of 70 minutes that overlap, so a late start leaves no gap. Each runs in its own process with only its own member's function-call key, and `agent/mainnet/guard.mjs` reads every key from chain first and refuses any that can do more than `exit` and `cancel_spend`. The page's Proof section shows whether a shift is running now.
+`.github/workflows/guard.yml` keeps agents watching `vault2.dissentfinance.near` in shifts. Each shift watches for under six hours, starts the next one itself and overlaps it by three minutes, so there is normally no gap and the chain does not depend on GitHub's schedule; the schedule only restarts it if a shift dies without handing over. Each runs in its own process with only its own member's function-call key, and `agent/mainnet/guard.mjs` reads every key from chain first and refuses any that can do more than `exit` and `cancel_spend`. The page's Proof section shows whether a shift is running now.
 
 ## Where things are
 

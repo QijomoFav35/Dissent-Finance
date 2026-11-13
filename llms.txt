@@ -32,7 +32,7 @@ On the page, "Try it, no wallet" loads agent/src/rules.js from the repo and runs
 - `cd tests/page && npm install && npx playwright install chromium && npm test`: 9 tests of the demo page in headless Chromium.
 - `cd contracts/vault && cargo test --lib`: 82 tests, two of them property tests (shares add up, books balance per token, exits pay exactly pro rata less what is held back for spends the leaver approved, bid funds add up, nothing executes early or twice).
 - `cargo test --test sputnik_flow`, `cargo test --test swarm_scenario -- --nocapture`: sandbox tests with the real Sputnik DAO code, real proposals and votes, five separate agent processes.
-- GitHub Actions: `.github/workflows/ci.yml` runs the agent, page, contract and sandbox tests on every push; `watch.yml` runs verify.mjs against mainnet every hour; `guard.yml` keeps Ben's and Cara's agents watching vault2 around the clock.
+- GitHub Actions: `.github/workflows/ci.yml` runs the agent, page, contract and sandbox tests on every push; `watch.yml` runs verify.mjs against mainnet on every push and on an hourly schedule; `guard.yml` keeps the members' agents watching vault2 in shifts that hand over to each other.
 
 ## Code map
 

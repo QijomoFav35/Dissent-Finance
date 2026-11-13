@@ -69,6 +69,8 @@ async function main() {
     ready.push(g);
   }
   if (!ready.length) return;
+  // Tells the workflow that agents really started, so a shift hands over only if it watched.
+  if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `agents=${ready.length}\n`);
 
   fs.mkdirSync(notesDir, { recursive: true });
   const config = path.join(notesDir, "guard.config.json");

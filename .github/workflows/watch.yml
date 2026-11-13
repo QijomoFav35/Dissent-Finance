@@ -1,4 +1,5 @@
-# Re-checks both vaults on NEAR mainnet every hour with agent/mainnet/verify.mjs: code hashes, keys,
+# Re-checks both vaults on NEAR mainnet on every push and on an hourly schedule (which GitHub runs
+# when it has capacity) with agent/mainnet/verify.mjs: code hashes, keys,
 # the DAO's code and policy, every agent key's permissions, the spend, every exit against its note,
 # and the books. Read-only: it holds no key, reads no secret and sends no transaction. A failed check
 # fails the run, so the badge in the README shows whether mainnet still matches what the repo says.

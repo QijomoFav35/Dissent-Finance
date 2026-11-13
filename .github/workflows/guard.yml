@@ -1,8 +1,11 @@
-# Keeps the members' agents on duty for vault2.dissentfinance.near in hourly shifts. A run starts
-# every hour and watches for 70 minutes, so each shift overlaps the next by about ten minutes and a
-# late start leaves no gap. During the overlap two watchers may hold the same member's key; if both
-# try to exit, the second is refused by the vault (the member no longer has shares) and costs only
-# its gas. A manual run can watch longer (up to 350 minutes). Each agent
+# Keeps the members' agents on duty for vault2.dissentfinance.near in shifts that hand over to each
+# other. A shift watches for 340 minutes, starts the next shift itself, and keeps watching for three
+# more minutes while the next one comes up, so there is normally no gap between them. GitHub runs scheduled
+# workflows only when it has spare capacity (in this repository, hours apart), so the schedule below
+# is only the backup that restarts the chain if a shift ever dies without handing over. A scheduled
+# or manual run that finds another shift already on duty stops at once and does nothing.
+# During a handover two watchers may hold the same member's key; if both try to exit, the second is
+# refused by the vault (the member no longer has shares) and costs only its gas. Each agent
 # runs in its own process with only its own member's key, from the repository secrets
 # ALICE_AGENT_KEY ... EMMA_AGENT_KEY (any that are set). Those are the agents' function-call keys:
 # on chain they can call only exit and cancel_spend on the vault, with no deposit, and an exit can
@@ -20,11 +23,16 @@ on:
   workflow_dispatch:
     inputs:
       minutes:
-        description: How long to watch, in minutes (1 to 350)
-        default: "70"
+        description: How long to watch before handing over, in minutes (1 to 340)
+        default: "340"
+      handover:
+        description: Set by a shift that is handing over to this one (leave empty)
+        default: ""
 
+# actions: write lets a shift start the next one (gh workflow run) and see whether one is on duty.
 permissions:
   contents: read
+  actions: write
 
 jobs:
   guard:
@@ -32,15 +40,41 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 358
     steps:
+      - name: Is another shift already on duty?
+        id: duty
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HANDOVER: ${{ github.event.inputs.handover }}
+        run: |
+          date +%s > "$RUNNER_TEMP/shift-start"
+          if [ -n "$HANDOVER" ]; then
+            echo "started by the previous shift: taking over"
+            echo "watch=yes" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A shift that is running, or one that was started and is still waiting for a runner.
+          others=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow guard.yml --limit 30 --json databaseId,status --jq "[.[] | select(.databaseId != $GITHUB_RUN_ID) | select(.status != \"completed\")] | length")
+          if [ "$others" -gt 0 ]; then
+            echo "another shift is on duty or starting ($others not completed): nothing to do"
+            echo "watch=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "no shift on duty: starting one"
+            echo "watch=yes" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.duty.outputs.watch == 'yes'
       - uses: actions/setup-node@v4
+        if: steps.duty.outputs.watch == 'yes'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: agent/package-lock.json
       - run: npm ci
+        if: steps.duty.outputs.watch == 'yes'
         working-directory: agent
       - name: Watch the vault
+        id: watch
+        if: steps.duty.outputs.watch == 'yes'
         working-directory: agent
         env:
           ALICE_AGENT_KEY: ${{ secrets.ALICE_AGENT_KEY }}
@@ -48,7 +82,38 @@ jobs:
           CARA_AGENT_KEY: ${{ secrets.CARA_AGENT_KEY }}
           DAN_AGENT_KEY: ${{ secrets.DAN_AGENT_KEY }}
           EMMA_AGENT_KEY: ${{ secrets.EMMA_AGENT_KEY }}
-          MINUTES: ${{ github.event.inputs.minutes || '70' }}
+          MINUTES: ${{ github.event.inputs.minutes || '340' }}
+        run: node mainnet/guard.mjs
+      # Hands over only if this shift really watched: agents started, and it either finished its time or
+      # had been watching for at least ten minutes when it failed. A shift that could not start (no keys,
+      # a refused key, an install or RPC failure) does not start another, so a broken setup cannot loop;
+      # the schedule restarts the chain later. Not after a manual cancel.
+      - name: Start the next shift
+        id: next
+        if: steps.duty.outputs.watch == 'yes' && !cancelled()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AGENTS: ${{ steps.watch.outputs.agents }}
+          OUTCOME: ${{ steps.watch.outcome }}
+        run: |
+          watched=$(( $(date +%s) - $(cat "$RUNNER_TEMP/shift-start") ))
+          if [ "${AGENTS:-0}" -gt 0 ] && { [ "$OUTCOME" = "success" ] || [ "$watched" -ge 600 ]; }; then
+            gh workflow run guard.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f handover=yes
+            echo "started the next shift after ${watched}s on duty with ${AGENTS} agent(s)"
+            echo "started=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "not handing over: agents=${AGENTS:-0}, watch ${OUTCOME}, ${watched}s on duty"
+          fi
+      - name: Keep watching while the next shift comes up
+        if: steps.next.outputs.started == 'yes' && !cancelled()
+        working-directory: agent
+        env:
+          ALICE_AGENT_KEY: ${{ secrets.ALICE_AGENT_KEY }}
+          BEN_AGENT_KEY: ${{ secrets.BEN_AGENT_KEY }}
+          CARA_AGENT_KEY: ${{ secrets.CARA_AGENT_KEY }}
+          DAN_AGENT_KEY: ${{ secrets.DAN_AGENT_KEY }}
+          EMMA_AGENT_KEY: ${{ secrets.EMMA_AGENT_KEY }}
+          MINUTES: "3"
         run: node mainnet/guard.mjs
       - uses: actions/upload-artifact@v4
         if: always()
