@@ -24,6 +24,7 @@ The track: "Build shared budgets, programmable rewards, collective ownership and
 5. **Read "The agents' notes".** Each card is a note an agent wrote before acting: the rule it checked, the numbers and its decision. The page fetches each note from this repo, hashes it in your browser and shows it matches the `reason_hash` that exit carried on chain.
 6. **Switch v1 / v2 at the top right.** v1 (`vault.dissentfinance.near`) ran the first live story and has no access keys. v2 (`vault2.dissentfinance.near`) has the fixes found in review and ran the same story on 12 November 2026.
 7. **Open Trezu** from the "Track" section and see the same two spends as executed requests in the DAO.
+8. **Scroll to "Share market".** On 13 November three members' agents, each with a key that can only bid and settle, bid for part of Cara's shares on mainnet: 7 bids, sold to Dan at 0.085979 USDC (95.5% of value, NEAR priced from Ref Finance's pool). The same round, Cara approved a spend and left while it was open, with her part held back for it. Every transaction is in [README, Round 3](README.md#round-3-the-share-market-and-an-approver-who-leaves-13-november-2026).
 
 ## 2. One-command check (read-only, under a minute)
 

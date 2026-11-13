@@ -25,7 +25,7 @@ export const USDC = "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36
 export const MEMBERS = ["alice", "ben", "cara", "dan", "emma"].map((m) => `${m}.dissentfinance.near`);
 export const VAULTS = {
   vault: { id: "vault.dissentfinance.near", label: "v1", code: "3jWHECjP5BCezXDBPR1XuQzb62KpBYaKZzhMXbmoHtWN", notes: path.join(here, "notes"), keyless: true },
-  vault2: { id: "vault2.dissentfinance.near", label: "v2", code: process.env.DISSENT_V2_CODE || "AJBeJNNHfRTP2SXV1q7yzsYVTxHaaV8roipVjJN2G3Zx", notes: path.join(here, "notes", "vault2"), keyless: false },
+  vault2: { id: "vault2.dissentfinance.near", label: "v2", code: process.env.DISSENT_V2_CODE || "2CkdfmNBiPGukvkBpRm1AygHERiGDdPXf23eXPL58uVM", notes: path.join(here, "notes", "vault2"), keyless: false },
 };
 const RPCS = (process.env.DISSENT_RPC || "https://free.rpc.fastnear.com,https://near.drpc.org,https://rpc.mainnet.near.org,https://rpc.intea.rs").split(",");
 // Old transactions are only served by archival nodes.

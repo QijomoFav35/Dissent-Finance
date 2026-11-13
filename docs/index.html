@@ -388,7 +388,7 @@ near contract call-function as-read-only VAULT_ID get_record json-args '{"from_i
 // Two vaults run on mainnet. v1 ran the first live story and is keyless, with limits fixed in v2.
 const VAULTS = {
   vault: { id: "vault.dissentfinance.near", label: "v1", code: "3jWHECjP5BCezXDBPR1XuQzb62KpBYaKZzhMXbmoHtWN", notes: "notes", flag: "--vault vault" },
-  vault2: { id: "vault2.dissentfinance.near", label: "v2", code: "AJBeJNNHfRTP2SXV1q7yzsYVTxHaaV8roipVjJN2G3Zx", notes: "notes/vault2", flag: "" },
+  vault2: { id: "vault2.dissentfinance.near", label: "v2", code: "2CkdfmNBiPGukvkBpRm1AygHERiGDdPXf23eXPL58uVM", notes: "notes/vault2", flag: "" },
 };
 const PICK = new URLSearchParams(location.search).get("v") in VAULTS ? new URLSearchParams(location.search).get("v") : "vault2";
 const VAULT = VAULTS[PICK].id;

@@ -32,7 +32,7 @@ const fc=(r,methods)=>({access_key:{permission:{FunctionCall:{allowance:'1',meth
 const marketKey=(a)=>R3&&['alice','dan','emma','cara'].map(N).includes(a)?[fc(V,['bid','settle_offer'])]:[];
 const args=Buffer.from(JSON.stringify({proposal_id:1,recipient:N('ben'),token_id:USDC,amount:'600000',memo:'group spend'})).toString('base64');
 const views={
- [V]:{contract_source_metadata:{link:'https://github.com/QijomoFav35/Dissent-Finance/tree/3f141922351559fe851c2c52f7489b058ec476a7'},
+ [V]:{contract_source_metadata:{link:'https://github.com/QijomoFav35/Dissent-Finance/tree/6ae02598ff28e45046523b940a6bcf061705fe50'},
   get_config:{dao:DAO,usdc:USDC,fee_account:'dissentfinance.near',window_ns:'600000000000'},
   get_spend:{id:0,proposal_id:1,recipient:N('ben'),token:'Usdc',amount:'600000',memo:'group spend',approvers:[N('ben'),N('cara')],objectors:[],queued_at:'1794490269844300751',window_ends:'1794490869844300751',status:'Cancelled'},
   get_record_len:record.length,get_record:record,
@@ -51,7 +51,7 @@ const server = http.createServer((req,res)=>{let b='';req.on('data',d=>b+=d);req
  const j=JSON.parse(b),p=j.params;let result,error;
  if(j.method==='block')result={header:{height:224230702}};
  else if(j.method==='tx'){const who=p.sender_account_id;result={receipts_outcome:[{outcome:{logs:['EVENT_JSON:'+JSON.stringify({event:'exit',data:[{account_id:who,reason_hash:notes[who]?.hash}]})]}}]};}
- else if(p.request_type==='view_account')result=p.account_id===DAO?{code_hash:'11111111111111111111111111111111',global_contract_hash:'DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF'}:{code_hash:'AJBeJNNHfRTP2SXV1q7yzsYVTxHaaV8roipVjJN2G3Zx'};
+ else if(p.request_type==='view_account')result=p.account_id===DAO?{code_hash:'11111111111111111111111111111111',global_contract_hash:'DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF'}:{code_hash:'2CkdfmNBiPGukvkBpRm1AygHERiGDdPXf23eXPL58uVM'};
  else if(p.request_type==='view_access_key_list')result=p.account_id===V?{keys:[{access_key:{permission:'FullAccess'}}]}:{keys:[{access_key:{permission:'FullAccess'}},fc(BAD&&p.account_id===N('cara')?'x':V),fc('vault.dissentfinance.near'),...marketKey(p.account_id)]};
  else{const a=JSON.parse(Buffer.from(p.args_base64,'base64').toString());let v=views[p.account_id]?.[p.method_name];if(typeof v==='function')v=v(a);if(v===undefined)error={name:'METHOD_NOT_FOUND',m:p.method_name};else result={result:[...Buffer.from(JSON.stringify(v))]};}
  res.setHeader('content-type','application/json');res.end(JSON.stringify({jsonrpc:'2.0',id:j.id,...(error?{error}:{result})}));

@@ -56,14 +56,14 @@ function chainV2() {
   return {
     ...base,
     vault: "vault2.dissentfinance.near",
-    code: "AJBeJNNHfRTP2SXV1q7yzsYVTxHaaV8roipVjJN2G3Zx",
+    code: "2CkdfmNBiPGukvkBpRm1AygHERiGDdPXf23eXPL58uVM",
     get_balances: { near: "200000000000000000000000", usdc: "400000", total_shares: "200000000000000000000000", members: 2, open_spends: 0 },
     get_spend: { ...base.get_spend, proposal_id: 1, queued_at: "1794490269844300751", window_ends: "1794490869844300751" },
     get_proposal: { ...base.get_proposal, id: 1 },
     get_record_len: record.length,
     get_record: record,
     get_shares: (a) => (stayed.includes(a.account_id) ? "100000000000000000000000" : "0"),
-    contract_source_metadata: { link: "https://github.com/QijomoFav35/Dissent-Finance/tree/3f141922351559fe851c2c52f7489b058ec476a7" },
+    contract_source_metadata: { link: "https://github.com/QijomoFav35/Dissent-Finance/tree/6ae02598ff28e45046523b940a6bcf061705fe50" },
     ft_balance_of: (a) => (["alice", "dan", "emma"].some((m) => a.account_id === N(m)) ? "200000" : a.account_id === "vault2.dissentfinance.near" ? "400000" : "0"),
   };
 }
