@@ -5,7 +5,9 @@
 > first; if the vault can then no longer pay, the spend is cancelled. Each member's agent watches for
 > them with a function-call key that can call only `exit` and `cancel_spend`. Live on mainnet with
 > real USDC: vault.dissentfinance.near (v1, keyless) and vault2.dissentfinance.near (v2), DAO
-> dissentfinance.sputnik-dao.near. NEAR HACKATHON, Social Money track.
+> dissentfinance.sputnik-dao.near (factory auto-update off). Round 3 on v2 (13 Nov 2026): three market
+> agents bid for part of a member's shares and an approver left with her part held back. NEAR HACKATHON,
+> Social Money track.
 
 Live page (reads mainnet in the browser): https://qijomofav35.github.io/Dissent-Finance/
 Trezu view of the DAO: https://trezu.app/dissentfinance.sputnik-dao.near/requests?tab=Approved
@@ -14,7 +16,10 @@ On the page, "Try it, no wallet" loads agent/src/rules.js from the repo and runs
 ## Start here
 
 - [JUDGE.md](https://github.com/QijomoFav35/Dissent-Finance/blob/main/JUDGE.md): five-minute path, the track requirements against live proof, one-command check.
-- [README](https://github.com/QijomoFav35/Dissent-Finance/blob/main/README.md): how it works, known limits, every test with its expected output, the mainnet runs with transaction links.
+- [README](https://github.com/QijomoFav35/Dissent-Finance/blob/main/README.md): what happened on mainnet, what is new, how it works in short, known limits, tests.
+- [docs/MAINNET.md](https://github.com/QijomoFav35/Dissent-Finance/blob/main/docs/MAINNET.md): every mainnet run and transaction (v1, v2, round 3: share market and an approver who leaves).
+- [docs/HOW-IT-WORKS.md](https://github.com/QijomoFav35/Dissent-Finance/blob/main/docs/HOW-IT-WORKS.md): full design. [RULES.md](https://github.com/QijomoFav35/Dissent-Finance/blob/main/RULES.md): share market rules and the market agents' strategy.
+- [docs/ADOPT.md](https://github.com/QijomoFav35/Dissent-Finance/blob/main/docs/ADOPT.md): adding it to an existing Sputnik DAO; costs and the 0.1% fee. [docs/TESTING.md](https://github.com/QijomoFav35/Dissent-Finance/blob/main/docs/TESTING.md): every test with expected output. [docs/REPLAY.md](https://github.com/QijomoFav35/Dissent-Finance/blob/main/docs/REPLAY.md): 30 rule profiles over 473 real contested spends.
 
 ## Check it (read-only, Node 20+, no keys, no installs)
 
@@ -23,7 +28,7 @@ On the page, "Try it, no wallet" loads agent/src/rules.js from the repo and runs
 
 ## Tests
 
-- `cd agent && npm ci && npm test`: 51 tests. Agent decisions and retries, note hashing, rules, the swarm simulation, the market agent and its 20-agent simulation, the guard refusing any key broader than an agent key, and verify.mjs against a stand-in for mainnet with four planted faults it must catch.
+- `cd agent && npm ci && npm test`: 53 tests. Agent decisions and retries, note hashing, rules, the swarm simulation, the market agent and its 20-agent simulation, the guard refusing any key broader than an agent key, and verify.mjs against a stand-in for mainnet with six planted faults it must catch.
 - `cd tests/page && npm install && npx playwright install chromium && npm test`: 9 tests of the demo page in headless Chromium.
 - `cd contracts/vault && cargo test --lib`: 82 tests, two of them property tests (shares add up, books balance per token, exits pay exactly pro rata less what is held back for spends the leaver approved, bid funds add up, nothing executes early or twice).
 - `cargo test --test sputnik_flow`, `cargo test --test swarm_scenario -- --nocapture`: sandbox tests with the real Sputnik DAO code, real proposals and votes, five separate agent processes.

@@ -42,7 +42,7 @@ function chain({ later = false, wrongHash = false } = {}) {
     get_ledger: () => ({ balance: later ? "0" : "400000", in_flight: "0", claimable: "0", pending_joins: "0", deposited: "1000000", spent: "0", fees: "0", exited: later ? "1000000" : "600000", refunded: "0" }),
     get_default_code_hash: "DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF",
     get_default_version: [3, 2],
-    get_factory_info: { factory_id: "sputnik-dao.near", auto_update: true },
+    get_factory_info: { factory_id: "sputnik-dao.near", auto_update: false },
     get_policy: { roles: [{ name: "council", kind: { Group: ["ben", "emma", "dan", "alice", "cara"].map(N) }, permissions: ["*:*"], vote_policy: {} }], default_vote_policy: { weight_kind: "RoleWeight", quorum: "0", threshold: "2" } },
   };
 }
@@ -79,7 +79,7 @@ async function open(views, { width = 1200, query = "?v=vault", guard = { status:
     const p = body.params;
     let result;
     if (p.request_type === "view_account") result = p.account_id === "dissentfinance.sputnik-dao.near" ? { code_hash: "11111111111111111111111111111111", global_contract_hash: "DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF" } : { code_hash: views.code, amount: "1" };
-    else if (p.request_type === "view_access_key_list") result = { keys: p.account_id.startsWith("vault") ? [] : [{ access_key: { permission: "FullAccess" } }, { access_key: { permission: { FunctionCall: { allowance: "248800000000000000000000", receiver_id: views.vault, method_names: ["exit", "cancel_spend"] } } } }] };
+    else if (p.request_type === "view_access_key_list") result = { keys: p.account_id.startsWith("vault") ? (views.vaultKeys ?? []) : [{ access_key: { permission: "FullAccess" } }, { access_key: { permission: { FunctionCall: { allowance: "248800000000000000000000", receiver_id: views.vault, method_names: ["exit", "cancel_spend"] } } } }] };
     else {
       let v = views[p.method_name];
       if (typeof v === "function") v = v(JSON.parse(Buffer.from(p.args_base64, "base64").toString()));
@@ -154,7 +154,7 @@ test("the proof panel reads the DAO, the agent keys and the books from the chain
     assert.match(rows, /PASS\s*The DAO runs unmodified Sputnik code\s*.*Sputnik 3\.2/);
     assert.match(rows, /PASS\s*The DAO.s policy\s*One council of 5 named members/);
     assert.match(rows, /PASS\s*Every agent key is limited to its job\s*5 of 5/);
-    assert.match(rows, /INFO\s*Only the council can change the DAO.s code\s*Factory auto-update is on/);
+    assert.match(rows, /PASS\s*Only the council can change the DAO.s code\s*Factory auto-update is off/);
     assert.match(rows, /PASS\s*The books balance\s*USDC: 1\.00 in, 0\.60 out to leavers/);
     assert.doesNotMatch(rows, /FAIL/);
     assert.equal(await p.page.locator("#keyrows tr").count(), 5);
@@ -186,7 +186,7 @@ test("share market: code from before it says so; after the redeploy, offers and 
     await p.close();
   }
   const offers = [
-    { id: 0, seller: N("cara"), shares: "50", reserve: "90000", ends_at: ts("2026-11-13T15:10:00Z"), best_bidder: N("dan"), best_bid: "97000", bids: 3, status: "Sold" },
+    { id: 0, seller: N("cara"), shares: "16327359938463994543033", reserve: "80999", ends_at: "1794563263529550665", best_bidder: N("dan"), best_bid: "85979", bids: 7, status: "Sold" },
     { id: 1, seller: N("ben"), shares: "20", reserve: "40000", ends_at: ts("2026-11-13T16:10:00Z"), best_bidder: null, best_bid: "0", bids: 0, status: "Open" },
   ];
   p = await open({ ...chainV2(), get_bid_funds_totals: ["203000", "300000"], get_open_offers: [offers[1]], get_offers: (a) => (a.from_index === 0 ? offers : []), get_offer_count: 2, get_factory_info: { factory_id: "sputnik-dao.near", auto_update: false } }, { query: "" });
@@ -194,7 +194,11 @@ test("share market: code from before it says so; after the redeploy, offers and 
     await p.page.waitForFunction(() => !document.getElementById("mkt-state").classList.contains("pending") && !document.getElementById("proofrows").textContent.includes("Reading"), null, { timeout: 20000 });
     assert.match(await p.text("#mkt-state"), /1 open offer\(s\), 1 sale\(s\) settled/);
     assert.match(await p.text("#mkt-funds"), /0\.203 USDC held for bids, 0\.3 USDC put in/);
-    assert.match(await p.text("#mkt-offers"), /0\s*Cara\s*0\.09 USDC\s*0\.097 USDC by Dan \(3 bids\)\s*Sold/);
+    assert.match(await p.text("#mkt-offers"), /0\s*Cara\s*0\.080999 USDC\s*0\.085979 USDC by Dan \(7 bids\)\s*Sold/);
+    // The bids from evidence.jsonl, matched against what the vault stored.
+    await p.page.waitForFunction(() => !document.getElementById("mkt-bids-wrap").hidden, null, { timeout: 20000 });
+    assert.equal(await p.page.locator("#mkt-bids tr").count(), 7);
+    assert.match(await p.text("#mkt-bids-sub"), /^PASS\s*7 bids by the agents' own keys.*They match what the vault stored: 7 bids, the last 0\.085979 USDC by Dan\. Settled by Dan's agent/);
     assert.match(await p.text("#mkt-offers"), /1\s*Ben\s*0\.04 USDC\s*none yet\s*Open, ends 2026-11-13 16:10:00/);
     assert.match(await p.text("#proofrows"), /PASS\s*Only the council can change the DAO.s code\s*Factory auto-update is off/);
     assert.deepEqual(p.errors, []);
@@ -247,6 +251,27 @@ test("on a phone the page does not scroll sideways", async () => {
 });
 
 // SHOT=<folder> node --test page.test.js also saves full-page screenshots of v2 there, for review.
+// README_SHOTS=docs/images node --test page.test.js saves the README's three screenshots: the checks at
+// the top, the two outcomes, and the share market with its bids. v2 as the chain holds it after round 3.
+if (process.env.README_SHOTS) {
+  test("README screenshots", async () => {
+    const offer = { id: 0, seller: N("cara"), shares: "16327359938463994543033", reserve: "80999", ends_at: "1794563263529550665", best_bidder: N("dan"), best_bid: "85979", bids: 7, status: "Sold" };
+    const views = { ...chainV2(), get_bid_funds_totals: ["214021", "300000"], get_open_offers: [], get_offers: (a) => (a.from_index === 0 ? [offer] : []), get_offer_count: 1, vaultKeys: [{ access_key: { permission: "FullAccess" } }] };
+    const p = await open(views, { query: "", width: 1200 });
+    try {
+      await p.page.waitForFunction(() => !document.getElementById("proofrows").textContent.includes("Reading") && !document.getElementById("mkt-bids-wrap").hidden, null, { timeout: 20000 });
+      await p.page.waitForTimeout(500);
+      const shot = async (sel, name) => (await p.page.$(sel)).screenshot({ path: path.join(process.env.README_SHOTS, name), type: "jpeg", quality: 85 });
+      await p.page.addStyleTag({ content: "header{position:static!important}" });
+      await shot("main > section:first-of-type", "readme-checks.jpg");
+      await shot("#outcomes", "readme-outcomes.jpg");
+      await shot("#market", "readme-market.jpg");
+    } finally {
+      await p.close();
+    }
+  });
+}
+
 if (process.env.SHOT) {
   test("screenshots", async () => {
     for (const [name, width] of [["desktop", 1280], ["phone", 390]]) {

@@ -282,6 +282,11 @@
       <div class="panel"><div class="eyebrow">Bid funds in the vault</div><div id="mkt-funds">…</div></div>
     </div>
     <div class="panel scroll"><table><thead><tr><th>Offer</th><th>Seller</th><th>Reserve</th><th>Best bid</th><th>Status</th></tr></thead><tbody id="mkt-offers"><tr><td colspan="5" class="pending">Reading…</td></tr></tbody></table></div>
+    <div id="mkt-bids-wrap" hidden>
+      <h3 style="margin-top:24px">The sale, bid by bid</h3>
+      <p class="sub" id="mkt-bids-sub"></p>
+      <div class="panel scroll"><table><thead><tr><th>Time (UTC)</th><th>Agent</th><th>Bid</th><th>Its limit</th><th>NEAR price it read</th><th>Transaction</th></tr></thead><tbody id="mkt-bids"></tbody></table></div>
+    </div>
     <h3 style="margin-top:24px">Twenty agents, thirty auctions</h3>
     <p class="sub">The simulation runs the live agent's own bidding code against the vault's auction rules: 20 members with random limits and funds, a random seller each time. Run it yourself: <code>node agent/sim/market.js --seed 2</code>.</p>
     <div class="panel scroll"><table><thead><tr><th>Seed</th><th>Sold</th><th>Median price, % of value</th><th>Range</th><th>Bids per sale</th><th>Highest limit won</th></tr></thead><tbody>
@@ -757,7 +762,8 @@ async function proof() {
   await tryAdd("Only the council can change the DAO's code", async () => {
     const f = await view(DAO, "get_factory_info");
     if (f.auto_update === false) return ["PASS", `Factory auto-update is off: the DAO refuses code from the factory, so only a passed council proposal can change it.`];
-    return ["INFO", `Factory auto-update is on: <span class="mono">${esc(f.factory_id)}</span> can push new DAO code. In the Sputnik source that opens an upgrade proposal, deployed after two weeks unless the council rejects it.`];
+    // The members voted it off on 13 November 2026; on again means someone changed it.
+    return ["FAIL", `Factory auto-update is on: <span class="mono">${esc(f.factory_id)}</span> can push new DAO code. In the Sputnik source that opens an upgrade proposal, deployed after two weeks unless the council rejects it.`];
   });
   const keyRows = [];
   await tryAdd("Every agent key is limited to its job", async () => {
@@ -826,6 +832,22 @@ async function market() {
   $("mkt-funds").textContent = `${usdc(totals[0])} USDC held for bids, ${usdc(totals[1])} USDC put in so far`;
   const rows = all.map((o) => `<tr><td>${Number(o.id)}</td><td>${cap(short(o.seller))}</td><td>${usdc(o.reserve)} USDC</td><td>${Number(o.bids) ? `${usdc(o.best_bid)} USDC by ${cap(short(o.best_bidder))} (${Number(o.bids)} bids)` : "none yet"}</td><td>${esc(o.status)}${o.status === "Open" ? `, ends ${when(o.ends_at)}` : ""}</td></tr>`);
   $("mkt-offers").innerHTML = rows.join("") || '<tr><td colspan="5">No offers yet.</td></tr>';
+  // Each agent's bids, from the evidence file the script wrote, checked against what the vault stored.
+  const sale = sold[0];
+  if (!sale) return;
+  let lines = [];
+  try {
+    const text = await (await fetch(`${RAW}/evidence.jsonl`)).text();
+    lines = text.split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((e) => e.vault === VAULT && Number(e.offer_id) === Number(sale.id));
+  } catch { return; }
+  const bids = lines.filter((e) => e.step === "market_bid");
+  const settle = lines.find((e) => e.step === "market_settle");
+  if (!bids.length) return;
+  const last = bids[bids.length - 1];
+  const matches = bids.length === Number(sale.bids) && last.usdc === sale.best_bid && last.bidder === sale.best_bidder;
+  $("mkt-bids").innerHTML = bids.map((b) => `<tr><td>${esc(b.at.slice(11, 19))}</td><td>${cap(short(b.bidder))}</td><td>${usdc(b.usdc)} USDC</td><td>${usdc(b.limit)}</td><td>${usdc(b.near_price)} USDC</td><td>${tx(b.tx)}</td></tr>`).join("");
+  $("mkt-bids-sub").innerHTML = `${matches ? mark("PASS") : mark("FAIL")} ${bids.length} bids by the agents' own keys, from <a href="https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/mainnet/evidence.jsonl">evidence.jsonl</a>. ${matches ? "They match what the vault stored" : "They do not match what the vault stored"}: ${Number(sale.bids)} bids, the last ${usdc(sale.best_bid)} USDC by ${cap(short(sale.best_bidder))}.${settle ? ` Settled by ${cap(short(settle.by))}'s agent: ${tx(settle.tx)}.` : ""} Times are the script's clock.`;
+  $("mkt-bids-wrap").hidden = false;
 }
 
 $("reload").addEventListener("click", () => { load(); proof(); market().catch(() => {}); });

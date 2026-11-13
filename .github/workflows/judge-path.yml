@@ -1,0 +1,61 @@
+# Runs JUDGE.md's commands exactly as a judge would type them, on a clean runner: a fresh git clone
+# (no checkout action, no cache), the read-only mainnet check on the lowest Node version JUDGE.md
+# names, then the agent tests the README lists. If the docs drift from what works, this fails.
+name: Judge path
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    name: "JUDGE.md section 2 on Node ${{ matrix.node }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 24]
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: git clone, as in JUDGE.md
+        run: |
+          git clone https://github.com/${{ github.repository }} Dissent-Finance
+          cd Dissent-Finance && git checkout --quiet ${{ github.sha }}
+      - name: node agent/mainnet/verify.mjs (v2)
+        working-directory: Dissent-Finance
+        run: node agent/mainnet/verify.mjs
+      - name: node agent/mainnet/verify.mjs --vault vault (v1)
+        working-directory: Dissent-Finance
+        run: node agent/mainnet/verify.mjs --vault vault
+
+  tests:
+    name: "README tests: cd agent && npm install && npm test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: git clone
+        run: |
+          git clone https://github.com/${{ github.repository }} Dissent-Finance
+          cd Dissent-Finance && git checkout --quiet ${{ github.sha }}
+      - name: cd agent && npm install && npm test
+        working-directory: Dissent-Finance
+        run: cd agent && npm install && npm test
+      - name: node agent/sim/market.js
+        working-directory: Dissent-Finance
+        run: node agent/sim/market.js

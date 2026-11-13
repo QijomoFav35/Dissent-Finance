@@ -3,7 +3,8 @@
 // balances follow the README's v2 run. With bad: true it plants three faults the checks must catch:
 // Cara's agent key widened to set_rules, a wrong reason_hash on Dan's exit, and NEAR books off.
 // With round3: true it adds what the third run leaves on chain: the DAO lock, Alice, Dan and Emma
-// joining again, market keys, bid funds and one share sale. sale: 'below' plants a sale under its reserve.
+// joining again, market keys, bid funds and one share sale. sale: 'below' plants a sale under its reserve,
+// and autoUpdate: true turns the DAO's factory auto-update back on.
 
 import http from "node:http";
 import fs from "node:fs";
@@ -11,7 +12,7 @@ import path from "node:path";
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 
-export function startMock({ bad = false, round3 = false, sale = 'ok' } = {}) {
+export function startMock({ bad = false, round3 = false, sale = 'ok', autoUpdate = false } = {}) {
 const BAD = bad, R3 = round3;
 const N=(s)=>`${s}.dissentfinance.near`, V='vault2.dissentfinance.near', DAO='dissentfinance.sputnik-dao.near', USDC='17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1';
 const notes=Object.fromEntries(['alice','dan','emma'].map(m=>[N(m),JSON.parse(fs.readFileSync(path.join(here,'..','..','mainnet','notes','vault2',`0-${N(m)}.json`)))]));
@@ -42,7 +43,7 @@ const views={
   get_shares:(a)=>[N('ben'),N('cara')].includes(a.account_id)?'100':R3&&[N('alice'),N('dan'),N('emma')].includes(a.account_id)?'50':'0',
   ...(R3?{get_bid_funds_totals:['300000','300000'],get_open_spends:[],get_holds:[],get_offers:(a)=>a.from_index===0?[offer]:[],get_offer_count:1}:{})},
  [DAO]:{get_policy:{roles:[{name:'council',kind:{Group:['ben','emma','dan','alice','cara'].map(N)},permissions:['*:*'],vote_policy:{}}],default_vote_policy:{weight_kind:'RoleWeight',quorum:'0',threshold:'2'}},
-  get_factory_info:{factory_id:'sputnik-dao.near',auto_update:!R3},
+  get_factory_info:{factory_id:'sputnik-dao.near',auto_update:autoUpdate},
   get_proposal:{id:1,proposer:N('ben'),description:'pay Ben',kind:{FunctionCall:{receiver_id:V,actions:[{method_name:'queue_spend',args,deposit:'0',gas:'60000000000000'}]}},status:'Approved',votes:{[N('ben')]:'Approve',[N('cara')]:'Approve'}}},
  'sputnik-dao.near':{get_default_code_hash:'DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF',get_default_version:[3,2]},
  [USDC]:{ft_balance_of:R3?'700000':'400000'},

@@ -25,7 +25,7 @@ export const USDC = "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36
 export const MEMBERS = ["alice", "ben", "cara", "dan", "emma"].map((m) => `${m}.dissentfinance.near`);
 export const VAULTS = {
   vault: { id: "vault.dissentfinance.near", label: "v1", code: "3jWHECjP5BCezXDBPR1XuQzb62KpBYaKZzhMXbmoHtWN", notes: path.join(here, "notes"), keyless: true },
-  vault2: { id: "vault2.dissentfinance.near", label: "v2", code: process.env.DISSENT_V2_CODE || "2CkdfmNBiPGukvkBpRm1AygHERiGDdPXf23eXPL58uVM", notes: path.join(here, "notes", "vault2"), keyless: false },
+  vault2: { id: "vault2.dissentfinance.near", label: "v2", code: process.env.DISSENT_V2_CODE || "2CkdfmNBiPGukvkBpRm1AygHERiGDdPXf23eXPL58uVM", notes: path.join(here, "notes", "vault2"), keyless: process.env.DISSENT_V2_KEYLESS === "1" },
 };
 const RPCS = (process.env.DISSENT_RPC || "https://free.rpc.fastnear.com,https://near.drpc.org,https://rpc.mainnet.near.org,https://rpc.intea.rs").split(",");
 // Old transactions are only served by archival nodes.
@@ -170,7 +170,8 @@ export async function runChecks(V, { out = () => {} } = {}) {
   await check("dao lock", async () => {
     const info = await view(DAO, "get_factory_info");
     if (info.auto_update === false) return ["PASS", `the DAO's factory auto-update is off: ${DAO} refuses code from ${info.factory_id}, so only a passed council proposal can change its code`];
-    return ["INFO", `the DAO's factory auto-update is on: ${info.factory_id} can push new DAO code, which in the Sputnik source opens an upgrade proposal and is deployed after two weeks unless the council rejects it`];
+    // The members voted it off on 13 November 2026 (proposal 2), so on again means someone changed it.
+    return ["FAIL", `the DAO's factory auto-update is on: ${info.factory_id} can push new DAO code, which in the Sputnik source opens an upgrade proposal and is deployed after two weeks unless the council rejects it`];
   });
 
   // ---- the agents' keys, read from each member's own account ----

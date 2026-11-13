@@ -11,28 +11,27 @@ import { startMock } from "./fixtures/mainnet-mock.js";
 const here = path.dirname(new URL(import.meta.url).pathname);
 const script = path.join(here, "..", "mainnet", "verify.mjs");
 
-function run(url, file = script) {
+function run(url, file = script, env = {}) {
   return new Promise((resolve) => {
-    execFile(process.execPath, [file, "--json"], { env: { ...process.env, DISSENT_RPC: url, DISSENT_ARCHIVAL_RPC: url } }, (err, stdout) => {
+    execFile(process.execPath, [file, "--json"], { env: { ...process.env, DISSENT_RPC: url, DISSENT_ARCHIVAL_RPC: url, ...env } }, (err, stdout) => {
       resolve({ code: err ? err.code : 0, out: JSON.parse(stdout) });
     });
   });
 }
 
-test("every check passes on the mainnet state, with v2's key reported as INFO", async () => {
+test("on code from before the market, the market checks say so as INFO", async () => {
   const mock = await startMock();
   try {
     const { code, out } = await run(mock.url);
     assert.equal(code, 0);
     assert.equal(out.failed, 0);
     assert.ok(out.results.length >= 22, `expected at least 22 checks, got ${out.results.length}`);
-    // INFO, not PASS or FAIL: v2's key, the DAO's auto-update, and the market checks on code from before the market.
+    // INFO, not PASS or FAIL: v2's key, and the market checks on code from before the market.
     const info = out.results.filter((r) => r.status === "INFO").map((r) => r.what);
-    assert.equal(info.length, 4);
+    assert.equal(info.length, 3);
     assert.match(info[0], /still has 1 access key/);
-    assert.match(info[1], /auto-update is on/);
-    assert.match(info[2], /before held-back exits/);
-    assert.match(info[3], /before the share market/);
+    assert.match(info[1], /before held-back exits/);
+    assert.match(info[2], /before the share market/);
     assert.ok(out.results.some((r) => /runs DtHZA1/.test(r.what) && r.status === "PASS"), "the DAO code check");
     assert.ok(out.results.some((r) => /sandbox tests deploy/.test(r.what) && r.status === "PASS"), "the sandbox bytes check");
   } finally {
@@ -40,8 +39,30 @@ test("every check passes on the mainnet state, with v2's key reported as INFO", 
   }
 });
 
+test("the DAO's auto-update switched back on fails its check", async () => {
+  const mock = await startMock({ round3: true, autoUpdate: true });
+  try {
+    const { code, out } = await run(mock.url);
+    assert.equal(code, 1);
+    assert.match(out.results.find((r) => r.status === "FAIL").what, /auto-update is on/);
+  } finally {
+    mock.close();
+  }
+});
+
+test("once v2 is keyless, any access key on it fails the keys check", async () => {
+  const mock = await startMock({ round3: true });
+  try {
+    const { code, out } = await run(mock.url, script, { DISSENT_V2_KEYLESS: "1" });
+    assert.equal(code, 1);
+    assert.match(out.results.find((r) => r.status === "FAIL").what, /still has 1 access key/);
+  } finally {
+    mock.close();
+  }
+});
+
 test("a widened agent key, a wrong note hash and unbalanced books each fail their check", async () => {
-  const mock = await startMock({ bad: true });
+  const mock = await startMock({ bad: true, round3: true });
   try {
     const { code, out } = await run(mock.url);
     assert.equal(code, 3);
