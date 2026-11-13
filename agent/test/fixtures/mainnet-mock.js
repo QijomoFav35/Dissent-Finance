@@ -28,14 +28,19 @@ if(R3){
  for(const m of ['alice','dan','emma']) record.push(ev('join',{account_id:N(m),shares:'50',near:'51000000000000000000000',usdc:'100000'},'2026-11-13T15:00:00Z'));
  record.push(ev('offer',{offer_id:0,seller:N('cara'),shares:'50',reserve:'90000',ends_at:offer.ends_at},'2026-11-13T15:00:10Z'));
  record.push(ev('share_sale',{offer_id:0,seller:N('cara'),buyer:N('dan'),shares:'50',usdc:'97000',bids:3},'2026-11-13T15:10:05Z'));
+ record.push(ev('queue_spend',{spend_id:1,proposal_id:3,recipient:N('ben'),amount:'70000',approve:2,not_approve:0},'2026-11-13T09:55:04Z'));
+ record.push(ev('exit',{account_id:N('cara'),shares:'40',near:'40',usdc:'150593',reason_hash:null},'2026-11-13T09:56:44Z'));
+ record.push(ev('execute_spend',{spend_id:1,recipient:N('ben'),amount:'70000',fee:'70'},'2026-11-13T10:12:02Z'));
 }
 const fc=(r,methods)=>({access_key:{permission:{FunctionCall:{allowance:'1',method_names:methods??(BAD&&r==='x'?['exit','set_rules']:['exit','cancel_spend']),receiver_id:r}}}});
 const marketKey=(a)=>R3&&['alice','dan','emma','cara'].map(N).includes(a)?[fc(V,['bid','settle_offer'])]:[];
 const args=Buffer.from(JSON.stringify({proposal_id:1,recipient:N('ben'),token_id:USDC,amount:'600000',memo:'group spend'})).toString('base64');
+const spend1={id:1,proposal_id:3,recipient:N('ben'),token:'Usdc',amount:'70000',memo:'approver story',approvers:[N('ben'),N('cara')],objectors:[],queued_at:ts('2026-11-13T09:55:04Z'),window_ends:ts('2026-11-13T10:05:04Z'),status:'Executed'};
 const views={
  [V]:{contract_source_metadata:{link:'https://github.com/QijomoFav35/Dissent-Finance/tree/6ae02598ff28e45046523b940a6bcf061705fe50'},
   get_config:{dao:DAO,usdc:USDC,fee_account:'dissentfinance.near',window_ns:'600000000000'},
-  get_spend:{id:0,proposal_id:1,recipient:N('ben'),token:'Usdc',amount:'600000',memo:'group spend',approvers:[N('ben'),N('cara')],objectors:[],queued_at:'1794490269844300751',window_ends:'1794490869844300751',status:'Cancelled'},
+  get_spend:(a)=>a.spend_id===1?spend1:{id:0,proposal_id:1,recipient:N('ben'),token:'Usdc',amount:'600000',memo:'group spend',approvers:[N('ben'),N('cara')],objectors:[],queued_at:'1794490269844300751',window_ends:'1794490869844300751',status:'Cancelled'},
+  get_spends:(a)=>a.from_index===0?(R3?[{id:0,proposal_id:1,recipient:N('ben'),token:'Usdc',amount:'600000',memo:'group spend',approvers:[N('ben'),N('cara')],objectors:[],queued_at:'1794490269844300751',window_ends:'1794490869844300751',status:'Cancelled'},spend1]:[{id:0,proposal_id:1,recipient:N('ben'),token:'Usdc',amount:'600000',memo:'group spend',approvers:[N('ben'),N('cara')],objectors:[],queued_at:'1794490269844300751',window_ends:'1794490869844300751',status:'Cancelled'}]):[],
   get_record_len:record.length,get_record:record,
   get_balances:{near:'200000000000000000000000',usdc:'400000',total_shares:'200',members:2,open_spends:0},
   get_members:[[N('ben'),'100'],[N('cara'),'100']],

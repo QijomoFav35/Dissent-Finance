@@ -68,13 +68,13 @@ You need Rust 1.95 (pinned in `rust-toolchain.toml`) with the `wasm32-unknown-un
    node agent/mainnet/verify.mjs --vault vault
    ```
 
-   For v2 and then v1, it reads one final block and prints about 22 numbered checks, each PASS, FAIL or INFO:
+   For v2 and then v1, it reads one final block and prints about 23 numbered checks, each PASS, FAIL or INFO:
 
    - the vault's code hash and the commit its NEP-330 metadata names; its access keys (INFO on v2, which still has its key; FAIL if v1 ever had one); the DAO and token it answers to;
    - the DAO's code is the code `sputnik-dao.near` publishes as its default, and the same bytes as `contracts/vault/res/sputnikdao2.wasm`, which the sandbox tests deploy; the DAO's policy (one council of the five named members, no Everyone role, two votes); that the DAO's factory auto-update is off (FAIL if it is ever switched back on);
    - every member's agent key, read from their own account: a function-call key for `exit` and `cancel_spend` on the vault, and at most a market key for `bid` and `settle_offer`, nothing more;
    - spend 0 is `Cancelled`; the DAO proposal is Approved and its `queue_spend` arguments are the spend; the Approve votes are the spend's approvers; the vault's record shows the queue, the exits and the cancel in that order, inside the window;
    - for each exit, the `reason_hash` in the vault's record equals the hash of the published note, computed on your machine, and so does the one in the exit transaction while the RPC endpoints still serve it (older transactions need an archival node; the line says which was compared); leavers hold no shares unless the record shows them joining again after the cancel;
-   - the remaining shares add up; the USDC and NEAR books balance (held = deposited - spent - fees - exited - refunded); the USDC contract's own balance for the vault covers what the vault owes members, bid funds included; what is held back for open spends equals the sum of their holds; every share sale was at or above its reserve and is in the vault's record (both INFO on code from before the market).
+   - the remaining shares add up; the USDC and NEAR books balance (held = deposited - spent - fees - exited - refunded); the USDC contract's own balance for the vault covers what the vault owes members, bid funds included; what is held back for open spends equals the sum of their holds; any approver who left while a spend they approved was open, and what became of that spend; every share sale was at or above its reserve and is in the vault's record (both INFO on code from before the market).
 
    It should end with `All checks passed`. The exit code is the number of failed checks. `--json` prints the same checks as JSON. The `Mainnet verify` workflow runs it every hour.

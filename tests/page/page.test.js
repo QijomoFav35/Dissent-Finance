@@ -68,6 +68,32 @@ function chainV2() {
   };
 }
 
+// v2 after round 3, as the chain holds it on 13 November: Alice, Dan and Emma back in, the share sale,
+// spend 1 approved by Ben and Cara, Cara leaving while it was open, and spend 1 paid.
+function chainV3() {
+  const record = JSON.parse(fs.readFileSync(path.join(here, "fixtures", "v2-record-r3.json"), "utf8"));
+  const v2 = chainV2();
+  const spend1 = { id: 1, proposal_id: 3, recipient: N("ben"), token: "Usdc", amount: "70000", memo: "approver story", approvers: [N("ben"), N("cara")], objectors: [], queued_at: "1794563704159595345", window_ends: "1794564304159595345", status: "Executed" };
+  const offer = { id: 0, seller: N("cara"), shares: "16327359938463994543033", reserve: "80999", ends_at: "1794563263529550665", best_bidder: N("dan"), best_bid: "85979", bids: 7, status: "Sold" };
+  const shares = { [N("emma")]: "50000000000000000000000", [N("ben")]: "100000000000000000000000", [N("alice")]: "50000000000000000000000", [N("dan")]: "66327359938463994543033" };
+  return {
+    ...v2,
+    get_record_len: record.length,
+    get_record: record,
+    get_spend: (a) => (a.spend_id === 1 ? spend1 : v2.get_spend),
+    get_balances: { near: "266327359938463994543033", usdc: "479337", total_shares: "266327359938463994543033", members: 4, open_spends: 0 },
+    get_members: Object.entries(shares),
+    get_shares: (a) => shares[a.account_id] ?? "0",
+    get_ledger: (a) => (a.token === "Usdc" ? { balance: "479337", in_flight: "0", claimable: "0", pending_joins: "0", deposited: "1300000", spent: "70000", fees: "70", exited: "750593", refunded: "0", held: "0" } : { balance: "266327359938463994543033", in_flight: "0", claimable: "0", pending_joins: "0", deposited: "653000000000000000000000", spent: "0", fees: "0", exited: "383672640061536005456967", refunded: "3000000000000000000000", held: "0" }),
+    ft_balance_of: (a) => (a.account_id === "vault2.dissentfinance.near" ? "693358" : "0"),
+    get_bid_funds_totals: ["214021", "300000"],
+    get_open_offers: [],
+    get_offers: (a) => (a.from_index === 0 ? [offer] : []),
+    get_offer_count: 1,
+    vaultKeys: [{ access_key: { permission: "FullAccess" } }],
+  };
+}
+
 async function open(views, { width = 1200, query = "?v=vault", guard = { status: "in_progress", run_number: 7 } } = {}) {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width, height: 900 } });
@@ -207,6 +233,31 @@ test("share market: code from before it says so; after the redeploy, offers and 
   }
 });
 
+test("after round 3: every row links its own transaction, and the approver's exit and spend 1 read from the chain", async () => {
+  const p = await open(chainV3(), { query: "" });
+  try {
+    await p.page.waitForFunction(() => !document.getElementById("approver-wrap").hidden, null, { timeout: 20000 });
+    const tl = await p.text("#timeline");
+    // Spend 0 was queued by Cara's vote on proposal 1, spend 1 by her vote on proposal 3: never the other one.
+    assert.match(tl, /spend 0: 0\.60 USDC to ben.*proposal 1: DpKwEZ8L/);
+    assert.match(tl, /spend 1: 0\.07 USDC to ben.*proposal 3: 9MgxBmfv/);
+    // The first joins and the rejoins each carry their own transaction.
+    assert.match(tl, /alice joined again with 0\.05 NEAR and 0\.10 USDC CjTqZ3ij/);
+    assert.equal((tl.match(/CjTqZ3ij/g) || []).length, 1, "Alice's rejoin transaction appears once, on the rejoin");
+    assert.match(tl, /share sale\s*cara sold shares to dan for 0\.085979 USDC after 7 agent bids; the fund did not move A1cR7MQV/);
+    assert.match(tl, /cara left with 0\.150593 USDC and 0\.08 NEAR, no rule broken: an approver leaving by choice; 0\.016752 USDC of her part held back for spend 1 53qLDWKV/);
+    assert.match(tl, /paid\s*spend 1 paid 0\.07 USDC to ben plus a 0\.00007 USDC fee 9osUXBVn/);
+    assert.doesNotMatch(tl, /\{"/, "no event is shown as raw JSON");
+    const ap = await p.text("#approver");
+    assert.match(ap, /approved by Ben and Cara\. Cara left 100\.137 s after it was queued, while it was still open/);
+    assert.match(ap, /0\.016752 USDC, her part of the spend, stayed behind for it/);
+    assert.match(ap, /Executed.*the members who stayed paid the other 0\.053318 USDC of its 0\.07007 USDC cost/);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});
+
 test("v2: when GitHub's API refuses, the guard row says so instead of failing", async () => {
   const p = await open(chainV2(), { query: "", guard: null });
   try {
@@ -256,7 +307,7 @@ test("on a phone the page does not scroll sideways", async () => {
 if (process.env.README_SHOTS) {
   test("README screenshots", async () => {
     const offer = { id: 0, seller: N("cara"), shares: "16327359938463994543033", reserve: "80999", ends_at: "1794563263529550665", best_bidder: N("dan"), best_bid: "85979", bids: 7, status: "Sold" };
-    const views = { ...chainV2(), get_bid_funds_totals: ["214021", "300000"], get_open_offers: [], get_offers: (a) => (a.from_index === 0 ? [offer] : []), get_offer_count: 1, vaultKeys: [{ access_key: { permission: "FullAccess" } }] };
+    const views = chainV3();
     const p = await open(views, { query: "", width: 1200 });
     try {
       await p.page.waitForFunction(() => !document.getElementById("proofrows").textContent.includes("Reading") && !document.getElementById("mkt-bids-wrap").hidden, null, { timeout: 20000 });

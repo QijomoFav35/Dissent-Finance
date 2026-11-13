@@ -295,6 +295,27 @@ export async function runChecks(V, { out = () => {} } = {}) {
     const ok = ["Usdc", "Near"].every((t) => BigInt(l[t].held) === parts[t] && BigInt(l[t].held) <= BigInt(l[t].balance));
     return [ok ? "PASS" : "FAIL", `held back for open spends from approvers who left: ${l.Usdc.held} USDC units and ${l.Near.held} yoctoNEAR, the sum of the ${open.length} open spend(s)' holds`];
   });
+  await check("approver exit", async () => {
+    if (!bidTotals) return ["INFO", `${V.id} runs code from before held-back exits`];
+    // Every spend after the first: an approver who left while it was open, and what became of it.
+    const spends = [];
+    for (let from = 0; ; from += 100) {
+      const page = await view(V.id, "get_spends", { from_index: from, limit: 100 });
+      spends.push(...page);
+      if (page.length < 100) break;
+    }
+    const cases = [];
+    for (const sp of spends) {
+      const q = fullRecord.find((e) => e.event === "queue_spend" && Number(e.data[0].spend_id) === Number(sp.id));
+      if (!q) continue;
+      const left = fullRecord.filter((e) => e.event === "exit" && sp.approvers.includes(e.data[0].account_id) && BigInt(e.ts) > BigInt(q.ts) && BigInt(e.ts) < BigInt(sp.window_ends));
+      for (const e of left) cases.push({ sp, who: e.data[0].account_id });
+    }
+    if (!cases.length) return ["INFO", "no member has left while a spend they approved was open"];
+    const ok = cases.every((c) => c.sp.status === "Executed" || c.sp.status === "Cancelled" || c.sp.status === "Queued");
+    const desc = cases.map((c) => `${c.who.split(".")[0]} approved spend ${c.sp.id} and left while it was open; it is ${c.sp.status}`).join("; ");
+    return [ok ? "PASS" : "FAIL", `${desc}. An approver can leave, and their part stays behind for the spend`];
+  });
   await check("market", async () => {
     if (!bidTotals) return ["INFO", `${V.id} runs code from before the share market`];
     const sales = fullRecord.filter((e) => e.event === "share_sale").map((e) => e.data[0]);

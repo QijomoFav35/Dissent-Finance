@@ -202,6 +202,7 @@
     <p class="eyebrow">Sputnik DAO · NEAR mainnet · USDC</p>
     <h1>If your group votes to spend money you didn't agree to, take your share out before it pays.</h1>
     <p class="lede">Dissent Finance is a vault that sits next to a group's unchanged Sputnik DAO. A spend the DAO approves waits for a fixed window. Anyone who did not vote for it can leave with their exact share first, and if the vault can no longer pay, the spend is cancelled. Each member's agent watches for them, with a key that can call only <code>exit</code> and <code>cancel_spend</code>.</p>
+    <p class="sub" style="margin-top:-4px">In 16 Sputnik DAOs, 473 approved transfers went through over at least one Reject vote (<a href="https://github.com/QijomoFav35/Dissent-Finance/blob/main/docs/REPLAY.md">427 of them routine payouts in one DAO</a>), and none of those members had a way out. Here the DAO stays exactly as it is, and its members have voted its factory auto-update off.</p>
     <div class="checks" id="checks">
       <div class="check"><div class="mark">…</div><div><b>Reading mainnet</b><span>Your browser is calling public NEAR RPC.</span></div></div>
     </div>
@@ -311,6 +312,11 @@
       <table class="timeline"><thead><tr><th>Time (UTC)</th><th>Event</th><th>Detail</th></tr></thead><tbody id="timeline"><tr><td colspan="3" class="pending">…</td></tr></tbody></table>
     </div>
 
+    <div id="approver-wrap" hidden>
+      <h3 style="margin-top:28px">An approver who leaves still pays her part</h3>
+      <div class="panel"><p id="approver" style="margin:0"></p></div>
+    </div>
+
     <h3 style="margin-top:28px">The agents' notes</h3>
     <p class="sub">Each agent wrote a note before acting: the rules it checked, the numbers, and its decision. An exit carries the note's SHA-256 as <code>reason_hash</code>. This page fetches each note from the repo, hashes it in your browser, and compares it with the hash on chain.</p>
     <div class="notes" id="notes"><div class="panel pending">…</div></div>
@@ -327,9 +333,11 @@
       <thead><tr><th>The track asks for</th><th>How Dissent Finance meets it</th><th>Proof</th></tr></thead>
       <tbody>
         <tr><td>Build on the existing Sputnik DAO, don't write a new multisig</td><td>The DAO is a stock one from the public <code>sputnik-dao.near</code> factory. The vault is a separate contract; it only accepts a spend after reading the DAO's own record of the approved proposal.</td><td><a href="https://nearblocks.io/address/dissentfinance.sputnik-dao.near">The DAO on mainnet</a></td></tr>
-        <tr><td>Trezu</td><td>Trezu lists the DAO like any other treasury. Both spends show there as executed <code>queue_spend</code> calls on the vaults, each with 2 approving votes (2 needed).</td><td><a href="https://trezu.app/dissentfinance.sputnik-dao.near/requests?tab=Approved">Open it in Trezu</a></td></tr>
-        <tr><td>Shared budgets, collective ownership</td><td>Members own the fund by shares, and nobody can be made to fund a spend they voted against: they can leave with their exact share while it waits.</td><td><a href="#members">Members now</a></td></tr>
+        <tr><td>Trezu</td><td>Trezu lists the DAO like any other treasury. Its requests are the DAO's own proposals: the three spends, each a <code>queue_spend</code> call on a vault with 2 approving votes (2 needed), and the members' vote to turn off the factory's auto-update.</td><td><a href="https://trezu.app/dissentfinance.sputnik-dao.near/requests?tab=Approved">Open it in Trezu</a></td></tr>
+        <tr><td>Shared budgets, collective ownership</td><td>Members own the fund by shares, and nobody can be made to fund a spend they did not approve: they can leave with their exact share while it waits. A member who approved can leave too, but their part of that spend stays behind for it. A member who wants out without taking money from the fund can sell shares to the others instead.</td><td><a href="#members">Members now</a>, <a href="#approver-wrap">the approver who left</a>, <a href="#market">the share sale</a></td></tr>
+        <tr><td>Programmable rules</td><td>Each member's exit rules are stored on chain in the vault: the largest share of the fund one spend may take, whether the receiver must have been paid before (a trust tier the receiver earns by being paid), and blocked receivers. The agent applies them the same way every time, so anyone can replay a decision from its note.</td><td><a href="#try">Try it with your own rules</a></td></tr>
         <tr><td>Named accounts</td><td>Every member, agent key and exit is a named account (<code>alice.dissentfinance.near</code>…). The agents' keys are function-call keys on each member's own account.</td><td><a href="#notes">The notes and their hashes</a></td></tr>
+        <tr><td>Use it with a DAO you already run</td><td>Three things to set up and no migration: deploy the vault next to the DAO, members join, and spends become ordinary <code>queue_spend</code> proposals. A 0.1% fee on each paid spend is the only revenue.</td><td><a href="https://github.com/QijomoFav35/Dissent-Finance/blob/main/docs/ADOPT.md">docs/ADOPT.md</a></td></tr>
       </tbody>
     </table></div>
     <div class="logos">
@@ -409,6 +417,8 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 const short = (a) => esc(String(a).replace(".dissentfinance.near", ""));
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const usdc = (u) => (Number(BigInt(u)) / 1e6).toFixed(2);
+// Every digit, for the small amounts of the later rounds.
+const u6 = (u) => String(Number(BigInt(u)) / 1e6);
 const near = (y) => (Number(BigInt(y) / 10n ** 20n) / 1e4).toFixed(2);
 const tx = (h) => `<a class="mono" href="https://nearblocks.io/txns/${esc(h)}">${esc(h.slice(0, 8))}</a>`;
 const when = (ns) => new Date(Number(BigInt(ns) / 1_000_000n)).toISOString().replace("T", " ").slice(0, 19);
@@ -474,17 +484,23 @@ async function load() {
     const evidence = evidenceText.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } })
       .filter((e) => e && (e.vault ?? "vault.dissentfinance.near") === VAULT);
     const txFor = {};
+    // Later rounds reuse the same accounts and steps, so every lookup is keyed by round or by id.
+    const joinTx = {}, voteTx = {}, execTx = {}, settleTx = {};
+    let approverExit = null;
     for (const e of evidence) {
-      if (e.step === "join") txFor[`join:${e.account}`] = e.tx;
-      if (e.step === "propose") txFor.propose = e.tx;
-      if (e.step === "vote") txFor[`vote:${e.voter}`] = e.tx;
+      if (e.step === "join") (joinTx[`${e.round === 3 ? 3 : 1}:${e.account}`] ??= []).push(e.tx);
+      if (e.step === "propose" && e.round !== 3) txFor.propose = e.tx;
+      if (e.step === "vote") voteTx[`${e.proposal_id}:${e.voter}`] = e.tx;
+      if (e.step === "execute_spend") execTx[e.spend_id] = e.tx;
+      if (e.step === "market_settle") settleTx[e.offer_id] = e.tx;
+      if (e.step === "approver_exit") approverExit = e;
       if (e.step === "exits_and_cancel") {
         txFor["exit:emma.dissentfinance.near"] = e.emma_exit;
         txFor["exit:dan.dissentfinance.near"] = e.dan_exit;
         txFor["exit:alice.dissentfinance.near"] = e.alice_exit;
         txFor.cancel = e.cara_cancel;
       }
-      if (e.step === "exit") txFor[`exit:${e.account}`] = e.tx;
+      if (e.step === "exit" && e.round !== 3) txFor[`exit:${e.account}`] = e.tx;
       if (e.step === "cancel") txFor.cancel = e.tx;
     }
 
@@ -552,17 +568,47 @@ async function load() {
 
     // ---------- timeline from the vault's record ----------
     const rows = [];
+    const joinsSeen = {};
+    const later = (ev) => cancel && BigInt(ev.ts) > BigInt(cancel.ts);
     for (const ev of record) {
       const d = ev.data?.[0] ?? {};
       const at = when(ev.ts);
+      const joinKey = `${later(ev) ? 3 : 1}:${d.account_id}`;
       const live = (ev.event === "queue_spend" || ev.event === "exit" || ev.event === "cancel_spend") && queuedAt && BigInt(ev.ts) >= BigInt(queuedAt) && BigInt(ev.ts) <= settledAt;
       if (ev.event === "pending_deposit") rows.push([at, "deposit", `${short(d.account_id)} sent ${usdc(d.usdc)} USDC to join`, live]);
-      else if (ev.event === "join") rows.push([at, "join", `${short(d.account_id)} put in ${near(d.near)} NEAR and ${usdc(d.usdc)} USDC${txFor[`join:${d.account_id}`] ? ` ${tx(txFor[`join:${d.account_id}`])}` : ""}`, live]);
+      else if (ev.event === "join") {
+        const i = (joinsSeen[joinKey] = (joinsSeen[joinKey] ?? -1) + 1);
+        const h = joinTx[joinKey]?.[i];
+        rows.push([at, "join", `${short(d.account_id)} ${later(ev) ? "joined again with" : "put in"} ${near(d.near)} NEAR and ${usdc(d.usdc)} USDC${h ? ` ${tx(h)}` : ""}`, live]);
+      }
       else if (ev.event === "set_rules") rows.push([at, "rules", `${short(d.account_id)} set exit rules`, live]);
-      else if (ev.event === "queue_spend") rows.push([at, "<strong>spend queued</strong>", `${usdc(d.amount)} USDC to ${short(d.recipient)}, ${Number(d.approve)} approved, ${Number(d.not_approve)} did not${txFor["vote:cara.dissentfinance.near"] ? `. Approving vote: ${tx(txFor["vote:cara.dissentfinance.near"])}` : ""}`, live]);
-      else if (ev.event === "exit") rows.push([at, '<span class="pill exit">exit</span>', `${short(d.account_id)} left with ${usdc(d.usdc)} USDC and ${near(d.near)} NEAR, note hash <span class="mono">${esc((d.reason_hash || "").slice(0, 12))}…</span>${txFor[`exit:${d.account_id}`] ? ` ${tx(txFor[`exit:${d.account_id}`])}` : ""}`, live]);
+      else if (ev.event === "queue_spend") {
+        // The vote that queued it is the last approving vote on its own DAO proposal.
+        const v = voteTx[`${d.proposal_id}:cara.dissentfinance.near`] ?? voteTx[`${d.proposal_id}:ben.dissentfinance.near`];
+        rows.push([at, "<strong>spend queued</strong>", `spend ${Number(d.spend_id)}: ${usdc(d.amount)} USDC to ${short(d.recipient)}, ${Number(d.approve)} approved, ${Number(d.not_approve)} did not${v ? `. Queued by the vote on proposal ${Number(d.proposal_id)}: ${tx(v)}` : ""}`, live]);
+      }
+      else if (ev.event === "exit") {
+        const mine = approverExit && later(ev) && approverExit.account === d.account_id;
+        const h = mine ? approverExit.tx : txFor[`exit:${d.account_id}`];
+        const why = d.reason_hash ? `note hash <span class="mono">${esc(d.reason_hash.slice(0, 12))}…</span>` : "no rule broken: an approver leaving by choice";
+        rows.push([at, '<span class="pill exit">exit</span>', `${short(d.account_id)} left with ${later(ev) ? u6(d.usdc) : usdc(d.usdc)} USDC and ${near(d.near)} NEAR, ${why}${mine ? `; ${u6(approverExit.holds.reduce((a, x) => a + BigInt(x[1]), 0n))} USDC of her part held back for spend ${Number(approverExit.spend_id)}` : ""}${h ? ` ${tx(h)}` : ""}`, live]);
+      }
+      else if (ev.event === "execute_spend") rows.push([at, '<span class="pill stay">paid</span>', `spend ${Number(d.spend_id)} paid ${u6(d.amount)} USDC to ${short(d.recipient)} plus a ${u6(d.fee)} USDC fee${execTx[d.spend_id] ? ` ${tx(execTx[d.spend_id])}` : ""}`, live]);
+      else if (ev.event === "share_sale") rows.push([at, '<span class="pill done">share sale</span>', `${short(d.seller)} sold shares to ${short(d.buyer)} for ${String(Number(BigInt(d.usdc)) / 1e6)} USDC after ${Number(d.bids)} agent bids; the fund did not move${settleTx[d.offer_id] ? ` ${tx(settleTx[d.offer_id])}` : ""}`, live]);
       else if (ev.event === "cancel_spend") rows.push([at, '<span class="pill done">cancelled</span>', `spend ${d.spend_id} cancelled by ${short(d.by)}'s agent: the vault could no longer pay it${txFor.cancel ? ` ${tx(txFor.cancel)}` : ""}`, live]);
       else rows.push([at, esc(ev.event), `<span class="mono">${esc(JSON.stringify(d)).slice(0, 160)}</span>`, live]);
+    }
+    // ---------- the approver who left during spend 1 ----------
+    const spend1 = await view(VAULT, "get_spend", { spend_id: 1 }).catch(() => null);
+    const q1 = record.find((ev) => ev.event === "queue_spend" && ev.data?.[0]?.spend_id === 1);
+    const x1 = record.find((ev) => ev.event === "execute_spend" && ev.data?.[0]?.spend_id === 1);
+    const leaver = spend1 && q1 ? record.find((ev) => ev.event === "exit" && spend1.approvers.includes(ev.data?.[0]?.account_id) && BigInt(ev.ts) > BigInt(q1.ts) && BigInt(ev.ts) < BigInt(spend1.window_ends)) : null;
+    if (spend1 && leaver) {
+      const who = leaver.data[0].account_id;
+      const held = approverExit?.account === who ? approverExit.holds.reduce((a, x) => a + BigInt(x[1]), 0n) : null;
+      const cost = BigInt(spend1.amount) + (x1 ? BigInt(x1.data[0].fee) : 0n);
+      $("approver").innerHTML = `Spend 1, ${u6(spend1.amount)} USDC to ${cap(short(spend1.recipient))}, was approved by ${spend1.approvers.map((a) => cap(short(a))).join(" and ")}. ${cap(short(who))} left ${secs(q1.ts, leaver.ts)} s after it was queued, while it was still open: under the vault's earlier code she could not have. She took ${u6(leaver.data[0].usdc)} USDC and her ${near(leaver.data[0].near)} NEAR${held != null ? `, and ${u6(held)} USDC, her part of the spend, stayed behind for it` : ""}${approverExit ? ` (${tx(approverExit.tx)})` : ""}. Status now: <span class="pill ${spend1.status === "Executed" ? "stay" : "info"}">${esc(spend1.status)}</span>${x1 ? `. When it paid, that part paid her share${held != null ? `, and the members who stayed paid the other ${u6(cost - held)} USDC of its ${u6(cost)} USDC cost` : ""}${execTx[1] ? ` (${tx(execTx[1])})` : ""}` : ""}. Leaving after approving saves nothing.`;
+      $("approver-wrap").hidden = false;
     }
     $("timeline").innerHTML = rows.map(([a, b, c, live]) => `<tr${live ? ' data-live="1"' : ""}><td>${a}</td><td>${b}</td><td>${c}</td></tr>`).join("") || '<tr><td colspan="3">No events.</td></tr>';
     const exitHash = {};

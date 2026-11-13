@@ -46,7 +46,7 @@ Five friends put 10 NEAR and 100 USDC each into a vault. At 3am Ben and Cara, tw
 
 ```sh
 git clone https://github.com/QijomoFav35/Dissent-Finance && cd Dissent-Finance
-node agent/mainnet/verify.mjs               # v2: 22 checks, read-only, Node 20+, no installs
+node agent/mainnet/verify.mjs               # v2: 23 checks, read-only, Node 20+, no installs
 node agent/mainnet/verify.mjs --vault vault # v1
 near contract verify deployed-at vault2.dissentfinance.near network-config mainnet now   # rebuilds the deployed code (Docker)
 ```

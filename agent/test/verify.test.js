@@ -28,10 +28,11 @@ test("on code from before the market, the market checks say so as INFO", async (
     assert.ok(out.results.length >= 22, `expected at least 22 checks, got ${out.results.length}`);
     // INFO, not PASS or FAIL: v2's key, and the market checks on code from before the market.
     const info = out.results.filter((r) => r.status === "INFO").map((r) => r.what);
-    assert.equal(info.length, 3);
+    assert.equal(info.length, 4);
     assert.match(info[0], /still has 1 access key/);
     assert.match(info[1], /before held-back exits/);
-    assert.match(info[2], /before the share market/);
+    assert.match(info[2], /before held-back exits/);
+    assert.match(info[3], /before the share market/);
     assert.ok(out.results.some((r) => /runs DtHZA1/.test(r.what) && r.status === "PASS"), "the DAO code check");
     assert.ok(out.results.some((r) => /sandbox tests deploy/.test(r.what) && r.status === "PASS"), "the sandbox bytes check");
   } finally {
@@ -88,6 +89,8 @@ test("after the third run: the DAO lock, rejoined leavers, market keys and a sha
     assert.equal(by(/held back for open spends/).status, "PASS");
     assert.match(by(/share sale/).what, /offer 0: cara to dan for 0\.097 USDC after 3 bids/);
     assert.match(by(/USDC contract says/).what, /300000 of it bid funds/);
+    assert.equal(by(/approved spend 1 and left while it was open/).status, "PASS");
+    assert.match(by(/approved spend 1/).what, /cara approved spend 1 and left while it was open; it is Executed/);
     assert.deepEqual(out.results.filter((r) => r.status === "INFO").map((r) => r.n), [2]);
   } finally {
     mock.close();
