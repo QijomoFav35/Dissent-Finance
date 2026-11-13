@@ -805,7 +805,7 @@ async function proof() {
       const started = new Date(run.run_started_at || run.created_at);
       const mins = Math.round((Date.now() - started) / 60000);
       const live = run.status === "in_progress";
-      return [live ? "PASS" : "INFO", `${live ? "A guard run is in progress" : `Last guard run: ${esc(run.conclusion || run.status)}`}: <a href="${esc(run.html_url)}">run #${Number(run.run_number)}</a>, started ${mins} min ago. Each run keeps Ben's and Cara's agents watching the vault for about six hours with their limited keys; its log shows every check.`];
+      return [live ? "PASS" : "INFO", `${live ? "A guard run is in progress" : `Last guard run: ${esc(run.conclusion || run.status)}`}: <a href="${esc(run.html_url)}">run #${Number(run.run_number)}</a>, started ${mins} min ago. A new shift starts every hour and watches for 70 minutes, so shifts overlap; each member's agent holds only its own limited key, and the log shows every check.`];
     });
   }
   $("proofrows").innerHTML = rows.join("");

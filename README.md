@@ -83,7 +83,7 @@ Expected output for each, step by step: [docs/TESTING.md](docs/TESTING.md). CI r
 
 ## Agents on duty
 
-`.github/workflows/guard.yml` keeps agents watching `vault2.dissentfinance.near` around the clock, in shifts of just under six hours. Each runs in its own process with only its own member's function-call key, and `agent/mainnet/guard.mjs` reads every key from chain first and refuses any that can do more than `exit` and `cancel_spend`. The page's Proof section shows whether a shift is running now.
+`.github/workflows/guard.yml` keeps agents watching `vault2.dissentfinance.near` around the clock, in hourly shifts of 70 minutes that overlap, so a late start leaves no gap. Each runs in its own process with only its own member's function-call key, and `agent/mainnet/guard.mjs` reads every key from chain first and refuses any that can do more than `exit` and `cancel_spend`. The page's Proof section shows whether a shift is running now.
 
 ## Where things are
 

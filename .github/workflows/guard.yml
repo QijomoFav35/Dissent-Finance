@@ -1,11 +1,13 @@
-# Keeps Ben's and Cara's agents on duty for vault2.dissentfinance.near, the members still in it.
-# Each run watches for just under six hours. A new run is scheduled every five hours and waits in
-# the queue (concurrency below) until the current one ends, so the next shift starts about a
-# minute after the last one stops. Each agent runs in its own process with only its own
-# member's key, from the repository secrets BEN_AGENT_KEY and CARA_AGENT_KEY. Those are the agents'
-# function-call keys: on chain they can call only exit and cancel_spend on the vault, with no
-# deposit, and an exit can only pay the member's own account. The run refuses any other kind of key.
-# Without the secrets the job logs "no agent keys, nothing to do" and succeeds.
+# Keeps the members' agents on duty for vault2.dissentfinance.near in hourly shifts. A run starts
+# every hour and watches for 70 minutes, so each shift overlaps the next by about ten minutes and a
+# late start leaves no gap. During the overlap two watchers may hold the same member's key; if both
+# try to exit, the second is refused by the vault (the member no longer has shares) and costs only
+# its gas. A manual run can watch longer (up to 350 minutes). Each agent
+# runs in its own process with only its own member's key, from the repository secrets
+# ALICE_AGENT_KEY ... EMMA_AGENT_KEY (any that are set). Those are the agents' function-call keys:
+# on chain they can call only exit and cancel_spend on the vault, with no deposit, and an exit can
+# only pay the member's own account. The run refuses any other kind of key. Without the secrets
+# the job logs "no agent keys, nothing to do" and succeeds.
 #
 # Nothing is sent while the vault is quiet. If an approved spend breaks a member's rules, that
 # member's agent writes its note, exits with the note's hash, and the notes are kept as the run's
@@ -14,23 +16,19 @@ name: Guard
 
 on:
   schedule:
-    - cron: "7 */5 * * *"
+    - cron: "7 * * * *"
   workflow_dispatch:
     inputs:
       minutes:
         description: How long to watch, in minutes (1 to 350)
-        default: "350"
+        default: "70"
 
 permissions:
   contents: read
 
-concurrency:
-  group: guard
-  cancel-in-progress: false
-
 jobs:
   guard:
-    name: Ben's and Cara's agents
+    name: Members' agents
     runs-on: ubuntu-latest
     timeout-minutes: 358
     steps:
@@ -45,9 +43,12 @@ jobs:
       - name: Watch the vault
         working-directory: agent
         env:
+          ALICE_AGENT_KEY: ${{ secrets.ALICE_AGENT_KEY }}
           BEN_AGENT_KEY: ${{ secrets.BEN_AGENT_KEY }}
           CARA_AGENT_KEY: ${{ secrets.CARA_AGENT_KEY }}
-          MINUTES: ${{ github.event.inputs.minutes || '350' }}
+          DAN_AGENT_KEY: ${{ secrets.DAN_AGENT_KEY }}
+          EMMA_AGENT_KEY: ${{ secrets.EMMA_AGENT_KEY }}
+          MINUTES: ${{ github.event.inputs.minutes || '70' }}
         run: node mainnet/guard.mjs
       - uses: actions/upload-artifact@v4
         if: always()

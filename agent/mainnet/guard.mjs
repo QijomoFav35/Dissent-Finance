@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// Keeps Ben's and Cara's agents on duty for vault2 for a fixed time (.github/workflows/guard.yml).
+// Keeps the members' agents on duty for vault2 for a fixed time (.github/workflows/guard.yml). A member
+// whose key secret is not set is skipped, and a member who has left simply has nothing to protect.
 // Each agent runs in its own watcher process holding only its own member's key. Before starting, it
 // reads each key from the chain and refuses it unless it is a function-call key that can call only
 // exit and cancel_spend on the vault.
 //
-//   BEN_AGENT_KEY=ed25519:... CARA_AGENT_KEY=ed25519:... MINUTES=350 node mainnet/guard.mjs
+//   ALICE_AGENT_KEY=ed25519:... BEN_AGENT_KEY=ed25519:... MINUTES=350 node mainnet/guard.mjs
 
 import fs from "node:fs";
 import path from "node:path";
@@ -16,10 +17,7 @@ import { AGENT_METHODS } from "../src/chain.js";
 
 const VAULT = "vault2.dissentfinance.near";
 const RPCS = (process.env.DISSENT_RPC || "https://free.rpc.fastnear.com,https://near.drpc.org,https://rpc.mainnet.near.org,https://rpc.intea.rs").split(",");
-const GUARDS = [
-  { account_id: "ben.dissentfinance.near", env: "BEN_AGENT_KEY" },
-  { account_id: "cara.dissentfinance.near", env: "CARA_AGENT_KEY" },
-];
+const GUARDS = ["alice", "ben", "cara", "dan", "emma"].map((m) => ({ account_id: `${m}.dissentfinance.near`, env: `${m.toUpperCase()}_AGENT_KEY` }));
 const minutes = Math.min(350, Math.max(1, Number(process.env.MINUTES || 350)));
 const here = path.dirname(new URL(import.meta.url).pathname);
 const notesDir = path.join(here, "notes", "guard");
@@ -49,7 +47,7 @@ export async function checkKey(rpc, accountId, secret) {
 async function main() {
   const present = GUARDS.filter((g) => process.env[g.env]);
   if (!present.length) {
-    log("no agent keys, nothing to do (set BEN_AGENT_KEY and CARA_AGENT_KEY as repository secrets)");
+    log(`no agent keys, nothing to do (set any of ${GUARDS.map((g) => g.env).join(", ")} as repository secrets)`);
     return;
   }
   const rpc = new Rpc(RPCS, { finality: "final" });
