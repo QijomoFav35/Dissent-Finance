@@ -29,7 +29,9 @@ export async function checkKey(rpc, accountId, secret) {
   try {
     publicKey = KeyPair.fromString(secret).getPublicKey().toString();
   } catch {
-    return { ok: false, why: "not a NEAR key" };
+    // Says only what shape the value has, never any of its characters.
+    const s = String(secret ?? "");
+    return { ok: false, why: `not a NEAR key (${s.length} characters, ${s.startsWith("ed25519:") ? "starts with ed25519: but does not decode" : "does not start with ed25519:"})` };
   }
   let key;
   try {
@@ -45,7 +47,10 @@ export async function checkKey(rpc, accountId, secret) {
 }
 
 async function main() {
-  const present = GUARDS.filter((g) => process.env[g.env]);
+  // A secret pasted with a trailing newline or Windows line ending (clip.exe adds one) is still the
+  // same key, so surrounding whitespace is dropped before it is read.
+  for (const g of GUARDS) g.secret = (process.env[g.env] ?? "").trim();
+  const present = GUARDS.filter((g) => g.secret);
   if (!present.length) {
     log(`no agent keys, nothing to do (set any of ${GUARDS.map((g) => g.env).join(", ")} as repository secrets)`);
     return;
@@ -53,7 +58,7 @@ async function main() {
   const rpc = new Rpc(RPCS, { finality: "final" });
   const ready = [];
   for (const g of present) {
-    const r = await checkKey(rpc, g.account_id, process.env[g.env]);
+    const r = await checkKey(rpc, g.account_id, g.secret);
     if (!r.ok) {
       console.error(`${g.account_id}: refusing this key: ${r.why}`);
       process.exitCode = 1;
@@ -76,7 +81,7 @@ async function main() {
   const restarts = Object.fromEntries(ready.map((g) => [g.account_id, 0]));
   const start = (g) => {
     const child = spawn(process.execPath, [path.join(here, "..", "src", "watch.js"), config, "--member", g.account_id], {
-      env: { PATH: process.env.PATH, AGENT_KEY: process.env[g.env] },
+      env: { PATH: process.env.PATH, AGENT_KEY: g.secret },
       cwd: path.join(here, ".."),
     });
     const name = g.account_id.split(".")[0].padEnd(4);

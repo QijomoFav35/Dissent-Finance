@@ -34,5 +34,7 @@ test("a key for another contract, or for more methods, is refused", async () => 
 
 test("a key the account does not have, or a string that is not a key, is refused", async () => {
   assert.match((await checkKey(onChain(null), "ben.dissentfinance.near", secret)).why, /not on ben/);
-  assert.match((await checkKey(onChain(null), "ben.dissentfinance.near", "hunter2")).why, /not a NEAR key/);
+  const why = (await checkKey(onChain(null), "ben.dissentfinance.near", "hunter2")).why;
+  assert.match(why, /not a NEAR key \(7 characters, does not start with ed25519:\)/);
+  assert.doesNotMatch(why, /hunter2/, "the refusal never repeats the value");
 });
