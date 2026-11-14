@@ -15,9 +15,9 @@ Live on NEAR mainnet with real USDC, next to an unchanged Sputnik DAO whose fact
 - **An approver who leaves still pays her part.** Cara approved a spend and left while it was open. The vault held back her 23.9% of it, and when the spend paid, that part paid her share ([exit](https://nearblocks.io/txns/53qLDWKV7hAij7P9MeJFRjshBJfeKR8GRaTpsd4ikd6u), [spend](https://nearblocks.io/txns/9osUXBVnfdFhMyzKT4xKVKkzFJ56pnwAqoVdRj5kteKX)).
 - **The DAO locked.** Members voted the DAO's factory auto-update off, so only a council proposal can change the DAO's code ([proposal 2](https://nearblocks.io/txns/C3qanhdzVAaQy2NQVXpmTE1aZ9KCPsoJZtj8rvcr87M4)).
 
-| The live page's own checks | The same vote, two outcomes | The share sale, bid by bid |
+| The live page's own checks | The same vote, two outcomes | The share sale, in the live feed |
 |---|---|---|
-| [![The page's checks, read from mainnet](docs/images/readme-checks.jpg)](https://qijomofav35.github.io/Dissent-Finance/) | [![Without the vault the DAO pays; with it, three agents leave and the spend is cancelled](docs/images/readme-outcomes.jpg)](https://qijomofav35.github.io/Dissent-Finance/#outcomes) | [![Seven bids by three agents, sold to Dan](docs/images/readme-market.jpg)](https://qijomofav35.github.io/Dissent-Finance/#market) |
+| [![The page's checks, read from mainnet](docs/images/readme-checks.jpg)](https://dissent.finance/preview/) | [![Without the vault the DAO pays; with it, three agents leave and the spend is cancelled](docs/images/readme-outcomes.jpg)](https://dissent.finance/preview/#problem) | [![The share sale in the live feed: Dan bought part of Cara's shares after 7 bids](docs/images/readme-market.jpg)](https://dissent.finance/preview/#feed) |
 
 The DAO is a stock one from the `sputnik-dao.near` factory, and [Trezu](https://trezu.app/dissentfinance.sputnik-dao.near/requests?tab=Approved) shows it like any treasury.
 
@@ -108,7 +108,7 @@ contracts/test-usdc   a NEP-141 token with open mint, for tests only
 agent/src             the exit agent and the market agent: rules, notes, reader, limited-key signer, watcher
 agent/sim             the swarm replay and the share market simulation
 agent/mainnet         the mainnet scripts, evidence.jsonl, published notes, verify.mjs, guard.mjs
-tests/page            headless tests of the demo page
+tests/page            headless tests of the site at docs/preview/
 docs                  the live page (GitHub Pages), and the longer docs listed above
 .github/workflows     ci.yml (every test), watch.yml (hourly mainnet checks), guard.yml (agents on duty)
 scripts               fetch-sputnik.mjs, replay3.mjs
