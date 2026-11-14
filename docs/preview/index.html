@@ -5,6 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dissent Finance: outvoted? Take your share out before it's paid</title>
 <meta name="description" content="A vault next to a NEAR DAO. When the group approves a payment you didn't vote for, your agent takes your exact share out before it's paid. Live on NEAR mainnet.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="icon" href="../favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<meta name="theme-color" content="#FFFFFF">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Dissent Finance">
+<meta property="og:description" content="If your group votes to spend money you didn't agree to, take your share out before it pays. Live on NEAR mainnet with real USDC.">
+<meta property="og:url" content="https://dissent.finance/preview/">
+<meta property="og:image" content="https://dissent.finance/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Dissent Finance">
+<meta name="twitter:description" content="If your group votes to spend money you didn't agree to, take your share out before it pays. Live on NEAR mainnet.">
+<meta name="twitter:image" content="https://dissent.finance/og.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&display=swap">
 <style>
@@ -107,8 +122,8 @@ h2 { text-wrap: balance; }
 
 /* Laptop and up: text and the live card side by side, so the card is on the first screen (phone layout unchanged) */
 @media (min-width: 1000px) {
-  .topgrid { max-width: 1200px; margin: 0 auto; padding: 48px 32px 64px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); gap: 48px; align-items: center; }
-  .topgrid .hero { padding: 0; max-width: none; margin: 0; }
+  .topgrid { max-width: 1200px; margin: 0 auto; padding: 48px 32px 64px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); gap: 48px; align-items: start; }
+  .topgrid .hero { padding: 20px 0 0; max-width: none; margin: 0; }
   .topgrid .hero h1 { font-size: clamp(2.6rem, 4.2vw, 3.6rem); max-width: 14ch; }
   .topgrid .hero .sub { font-size: 1.08rem; margin: 18px 0 24px; }
   .topgrid .hero .aside { flex-basis: 100%; }
@@ -344,10 +359,14 @@ td { padding: 6px 6px 6px 0; border-bottom: 1px solid var(--line); }
 pre { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; font: .875rem/1.6 var(--mono); margin: 0 0 1em; }
 .links { list-style: none; padding: 0; margin: 0; } .links li { padding: 4px 0; }
 code.h { font: .875rem/1.5 var(--mono); word-break: break-all; }
-footer { border-top: 1px solid var(--line); padding-block: 28px 44px; color: var(--muted); font-size: .875rem; }
+footer { background: var(--night); color: var(--night-muted); padding-top: 56px; font-size: .875rem; overflow: hidden; }
+footer h3 { color: #fff; } footer a, footer .links a { color: #6EF5BE; } footer .small { color: var(--night-muted); } footer .foot-b svg { color: #fff; } footer .links span { color: var(--night-muted); }
+footer .foot-b b { color: #fff !important; }
+.foot-mark { margin-top: 56px; line-height: 0; }
+.foot-mark svg { display: block; width: 100%; height: auto; overflow: hidden; font-family: var(--display); }
 footer .foot-grid { display: grid; gap: 28px; } @media (min-width: 900px) { footer .foot-grid { grid-template-columns: 1.2fr 1.3fr 1fr; } }
 .foot-b { display: flex; gap: 12px; align-items: flex-start; } .foot-b b { color: var(--ink); font-family: var(--display); } .foot-b p { margin: 4px 0 0; }
-footer h3 { font-size: 1rem; margin-bottom: 8px; color: var(--ink); } footer .small { font-size: .875rem; }
+footer h3 { font-size: 1rem; margin-bottom: 8px; color: #fff; } footer .small { font-size: .875rem; }
 .links.mono a { font-family: var(--mono); font-size: .875rem; word-break: break-all; } .links.mono span { color: var(--muted); font-size: .875rem; }
 footer svg { width: 22px; height: 22px; color: #17191b; }
 /* Phone pass, last so it wins over the component rules above */
@@ -357,17 +376,151 @@ footer svg { width: 22px; height: 22px; color: #17191b; }
   .held b { font-size: 1.9rem; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+/* ---------- live layer: icons, ticker, agents panel, load motion ---------- */
+.ic { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.ic .a { fill: var(--money); } .ic .g { stroke: var(--money); }
+.ic.sm { width: 16px; height: 16px; stroke-width: 2; }
+.ic.xs { width: 12px; height: 12px; stroke-width: 2.2; margin-right: 6px; vertical-align: -1px; }
+.icb { position: relative; flex: none; display: inline-grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); }
+.ex-item .icb .n { position: absolute; top: -7px; left: -7px; width: 20px; height: 20px; font-size: .72rem; margin: 0; }
+.ex-item[aria-selected="true"] .icb { border-color: var(--ink); }
+.way .icb { margin-bottom: 14px; }
+.checks .ic.sm { align-self: center; color: #A3A3A3; }
+
+.tick { border-block: 1px solid var(--line); background: var(--card); }
+.tick-in { display: flex; align-items: center; gap: 16px; min-height: 52px; }
+.tick-k { flex: none; display: grid; font-size: .8rem; line-height: 1.3; color: var(--muted); padding-right: 16px; border-right: 1px solid var(--line); }
+.tick-k b { color: var(--ink); font-weight: 600; font-size: .875rem; display: inline-flex; align-items: center; gap: 7px; }
+.tick-k b i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.tick.is-live .tick-k b i { background: var(--money); box-shadow: 0 0 0 3px var(--money-bg); }
+.tick-view { position: relative; flex: 1; min-width: 0; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
+.tick-track { display: flex; width: max-content; padding-left: 28px; animation: tick var(--tick-s, 90s) linear infinite; }
+.tick-view:hover .tick-track, .tick-view:focus-within .tick-track, .still .tick-track, .still .band, .still .dots i::after { animation-play-state: paused; }
+.tick-pause { order: 3; flex: none; font: 500 .8rem/1 var(--sans); color: var(--ink-2); background: var(--card); border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 12px; min-height: 32px; cursor: pointer; }
+.tick-pause:hover { color: var(--ink); border-color: var(--ink); } .tick-pause:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.tick-g { display: flex; }
+.tick-g a { display: inline-flex; align-items: center; gap: 8px; padding: 14px 22px 14px 0; margin-right: 22px; border-right: 1px solid var(--line); color: var(--ink-2); text-decoration: none; white-space: nowrap; font-size: .92rem; }
+.tick-g a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.tick-g a:focus-visible { outline: 3px solid var(--ink); outline-offset: -3px; }
+.tick-g a .tx { font: 500 .78rem/1 var(--mono); color: var(--muted); }
+.tick-g .ev { width: 8px; height: 8px; border-radius: 2px; flex: none; background: var(--line-strong); }
+.tick-g .ev.m { background: var(--money); } .tick-g .ev.v { background: var(--vote); } .tick-g .ev.w { background: var(--wait); }
+@keyframes tick { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (max-width: 640px) { .tick-in { flex-direction: column; align-items: stretch; gap: 0; padding-top: 10px; } .tick-pause { align-self: flex-start; margin: 4px 0 10px; order: 3; } .tick-k { border-right: 0; padding: 0; grid-template-columns: auto 1fr; gap: 8px; align-items: baseline; } }
+
+.duty { margin-top: 14px; background: var(--night); border: 1px solid #000; border-radius: 18px; color: #fff; padding: 14px 18px 16px; }
+@media (min-width: 900px) { .band .duty { padding-inline: 24px; } }
+.topgrid .band .duty { padding: 12px 20px 14px; margin-top: 12px; }
+.duty-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.duty-h { margin: 0; font-weight: 600; font-size: .95rem; }
+.duty-links { display: inline-flex; gap: 14px; }
+.duty-top a, .duty-line a { color: #E5E5E5; font-size: .875rem; }
+.duty-line { margin: 6px 0 10px; font-size: .9rem; color: #E5E5E5; }
+.duty-line b { color: #fff; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dots { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding: 0; list-style: none; font-size: .82rem; color: var(--night-muted); }
+.dots li { display: inline-flex; align-items: center; gap: 7px; }
+.dots i { position: relative; width: 9px; height: 9px; border-radius: 50%; background: #5C5C5C; }
+.duty.on .dots i { background: var(--money); }
+.duty.on .dots i::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--money); opacity: 0; animation: pulse 8s ease-out infinite; animation-delay: var(--d, 0s); }
+@keyframes pulse { 0% { transform: scale(1); opacity: .55; } 30% { transform: scale(2.6); opacity: 0; } 100% { transform: scale(2.6); opacity: 0; } }
+.duty-note { margin: 8px 0 0; font-size: .78rem; color: var(--night-muted); }
+.dots li.left { opacity: .55; } .duty.on .dots li.left i { background: #5C5C5C; } .duty.on .dots li.left i::after { display: none; }
+.duty-sub { margin: 10px 0 0; font-size: .82rem; color: var(--night-muted); }
+.duty-sub b { color: #fff; font-weight: 600; }
+
+.band { background: linear-gradient(180deg, #6EF5BE 0%, #20D08A 50%, #6EF5BE 100%); background-size: 100% 200%; animation: drift 24s ease-in-out infinite alternate; }
+@keyframes drift { from { background-position: 0 0; } to { background-position: 0 100%; } }
+.seat .bar i { transition: width 1.4s cubic-bezier(.2, .7, .2, 1); }
+.seats:not(.filled) .bar i { width: 0 !important; }
+
+.replay-tag { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin: 0 0 14px; font-size: .9rem; color: var(--ink-2); }
+.replay-tag span { font-weight: 600; font-size: .8rem; color: var(--wait); border: 1px solid currentColor; border-radius: 999px; padding: 2px 10px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .band { animation: none; background-size: 100% 100%; }
+  .tick-track { animation: none; }
+  .tick-pause { display: none; }
+  .tick-g[aria-hidden="true"] { display: none; }
+  .tick-view { overflow-x: auto; -webkit-mask-image: none; mask-image: none; }
+  .duty.on .dots i::after { animation: none; }
+  .seat .bar i { transition: none; }
+}
+
+.duty-h { display: inline-flex; align-items: center; gap: 8px; }
+.duty-h .pulse { position: relative; width: 8px; height: 8px; border-radius: 50%; background: #5C5C5C; }
+.duty.on .duty-h .pulse { background: var(--money); }
+.duty.on .duty-h .pulse::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--money); animation: pulse 8s ease-out infinite; }
+.feed-h { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: .78rem; color: var(--night-muted); border-top: 1px solid var(--night-line); padding-top: 10px; }
+.feed-h span:first-child { color: #E5E5E5; font-weight: 600; }
+.feed { --row: 58px; position: relative; height: calc(var(--row) * 3); overflow: hidden; margin-top: 6px; border-radius: 10px; }
+.feed:focus-visible { outline: 2px solid #6EF5BE; outline-offset: 2px; }
+.feed-list { list-style: none; margin: 0; padding: 0; transition: transform .7s cubic-bezier(.3, .7, .2, 1); }
+.feed-list.jump { transition: none; }
+.feed-list li { height: var(--row); display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 10px; align-items: center; border-bottom: 1px solid var(--night-line); font-size: .86rem; }
+.feed-list li .ev { width: 8px; height: 8px; border-radius: 2px; background: #5C5C5C; } .feed-list .ev.m { background: var(--money); } .feed-list .ev.v { background: #5B8CFF; } .feed-list .ev.w { background: #FFB561; }
+.feed-list li span.t { color: #E5E5E5; line-height: 1.3; } .feed-list li span.t .x { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.feed-list li span.t small { display: block; color: var(--night-muted); font-size: .74rem; }
+.feed-list li a { font: 500 .76rem/1 var(--mono); color: #6EF5BE; }
+
+.sim { margin: 0 16px; padding: 18px; border: 1px solid var(--line-strong); border-radius: 18px; background: var(--card); }
+@media (min-width: 760px) { .sim { margin-inline: 32px; } }
+.sim-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sim-tag { font-weight: 600; font-size: .78rem; color: var(--vote); border: 1px solid currentColor; border-radius: 999px; padding: 2px 10px; }
+.sim-h { font-size: 1.1rem; font-weight: 600; letter-spacing: -0.01em; }
+.sim-sub { margin: 8px 0 12px; font-size: .86rem; color: var(--muted); }
+.sim-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.sim-list li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 4px 10px; align-items: start; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: .86rem; }
+.sim-list li.wait { opacity: .35; }
+.sim-list li.wait .dec { visibility: hidden; }
+.sim-list li .ic.xs { margin: 3px 0 0; width: 14px; height: 14px; }
+.sim-list li b { font-weight: 600; }
+.sim-list li .why { color: var(--ink-2); }
+.sim-list li .dec { font-weight: 600; text-align: right; white-space: nowrap; }
+.sim-list li .dec.out { color: var(--money-ink); } .sim-list li .dec.stay { color: var(--muted); }
+.sim-list li .same { grid-column: 2 / 4; font-size: .78rem; color: var(--muted); }
+.sim-list li .same a { color: var(--money-ink); }
+@media (max-width: 520px) { .sim-list li { grid-template-columns: 22px minmax(0, 1fr); } .sim-list li .dec { grid-column: 2; text-align: left; } .sim-list li .same { grid-column: 2; } }
+.sim-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.sim-end { margin: 0; font-size: .86rem; color: var(--ink-2); flex: 1 1 260px; } .sim-end b { color: var(--wait); }
+.sim-end.wait { visibility: hidden; }
+.sim-foot .btn { min-height: 40px; font-size: .9rem; }
+@media (min-width: 1000px) {
+  .topgrid { grid-template-areas: "hero band" "sim band"; grid-template-rows: auto 1fr; }
+  .topgrid .hero { grid-area: hero; } .topgrid .band { grid-area: band; } .topgrid .sim { grid-area: sim; margin: 32px 0 0; align-self: start; }
+}
+@media (max-width: 999px) { .sim { margin-top: 24px; margin-bottom: 24px; } }
+@media (prefers-reduced-motion: reduce) { .feed { height: auto; max-height: calc(var(--row) * 5); overflow-y: auto; } .feed-list { transition: none; } .duty.on .duty-h .pulse::after { animation: none; } }
+.still .duty-h .pulse::after { animation-play-state: paused; }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-deposit" viewBox="0 0 24 24"><path d="M6 10h12v8a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3z"/><path d="M5 10h14"/><circle class="a" cx="12" cy="4.5" r="2.5"/><path class="g" d="M12 13v5m-2.5-2.5L12 18l2.5-2.5"/></symbol>
+<symbol id="i-vote" viewBox="0 0 24 24"><path class="a" d="M8 13V3h8v10"/><path d="M10.5 7.5l1.2 1.2 2.3-2.4"/><path d="M4 13h16v8H4z"/><path d="M9 17h6"/></symbol>
+<symbol id="i-wait" viewBox="0 0 24 24"><path d="M6 3h12M6 21h12"/><path d="M8 3v3l4 6 4-6V3M8 21v-3l4-6 4 6v3"/><path class="a" d="M9.5 19.5h5L12 16z"/></symbol>
+<symbol id="i-withdraw" viewBox="0 0 24 24"><path d="M4 11v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8M3 11h18"/><path class="g" d="M12 16V3M8 7l4-4 4 4"/></symbol>
+<symbol id="i-settle" viewBox="0 0 24 24"><path d="M3 12h5l5-6h4M8 12l5 6h4"/><circle class="a" cx="19.5" cy="6" r="2.2"/><path d="M18 16.5l3 3m0-3l-3 3"/></symbol>
+<symbol id="i-out" viewBox="0 0 24 24"><path d="M13 3H5v18h8"/><path class="g" d="M10 12h11M18 9l3 3-3 3"/></symbol>
+<symbol id="i-sell" viewBox="0 0 24 24"><path d="M3 11V4a1 1 0 0 1 1-1h7l10 10-8 8z"/><circle class="a" cx="7.5" cy="7.5" r="1.8"/></symbol>
+<symbol id="i-after" viewBox="0 0 24 24"><path d="M3 4h10v16H3z"/><path class="g" d="M5.5 11l2 2 3.5-3.5"/><path class="g" d="M15 16h6M18.5 13.5L21 16l-2.5 2.5"/></symbol>
+<symbol id="i-code" viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/><path class="g" d="M13.5 5l-3 14"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><path d="M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4"/><circle class="a" cx="12" cy="16" r="1.6"/></symbol>
+<symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M14.5 8.5l2 2"/></symbol>
+<symbol id="i-alice" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></symbol>
+<symbol id="i-ben" viewBox="0 0 24 24"><rect x="4.5" y="4.5" width="15" height="15" rx="1"/></symbol>
+<symbol id="i-cara" viewBox="0 0 24 24"><path d="M12 4l8.5 15h-17z"/></symbol>
+<symbol id="i-dan" viewBox="0 0 24 24"><path d="M12 3l9 9-9 9-9-9z"/></symbol>
+<symbol id="i-emma" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/></symbol>
+</defs></svg>
 <a class="skip" href="#main">Skip to content</a>
 <header class="nav"><div class="wrap">
   <a class="brand" href="#main"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><mask id="dfm1"><rect width="100" height="100" fill="#fff"/><rect x="47" y="0" width="60" height="53" fill="#000"/></mask><clipPath id="dfc1"><rect x="53" y="0" width="60" height="47"/></clipPath></defs><rect x="12" y="12" width="76" height="76" rx="21" fill="currentColor" mask="url(#dfm1)"/><g transform="translate(7 -7)"><rect x="12" y="12" width="76" height="76" rx="21" fill="#1f9d6b" clip-path="url(#dfc1)"/></g></svg>Dissent Finance</a>
-  <nav aria-label="Sections"><a href="#how">How it works</a><a href="#problem">Live demo</a><a href="#cases">Real DAOs</a><a href="#try">Try it</a><a href="#join">Get started</a><a href="#faq">FAQ</a></nav>
+  <nav aria-label="Sections"><a href="#how">How it works</a><a href="#problem">Replay</a><a href="#cases">Real DAOs</a><a href="#try">Try it</a><a href="#join">Get started</a><a href="#faq">FAQ</a></nav>
   <div class="nav-r"><a class="bal" href="#vault" title="Money in the vault now, read from mainnet"><i aria-hidden="true"></i><span id="nav-bal">0.48 USDC</span></a>
   <a class="gh hide-s" href="https://github.com/QijomoFav35/Dissent-Finance" target="_blank" rel="noopener">GitHub</a>
   <a class="btn hide-s" href="https://github.com/QijomoFav35/Dissent-Finance/blob/main/JUDGE.md" target="_blank" rel="noopener">Docs</a>
-  <details class="menu"><summary aria-label="Menu">Menu</summary><div class="menu-p"><a href="#how">How it works</a><a href="#problem">Live demo</a><a href="#cases">Real DAOs</a><a href="#try">Try it</a><a href="#join">Get started</a><a href="#faq">FAQ</a><a href="#proof">Verify</a><a href="https://github.com/QijomoFav35/Dissent-Finance/blob/main/JUDGE.md" target="_blank" rel="noopener">Docs</a><a href="https://github.com/QijomoFav35/Dissent-Finance" target="_blank" rel="noopener">GitHub</a></div></details></div>
+  <details class="menu"><summary aria-label="Menu">Menu</summary><div class="menu-p"><a href="#how">How it works</a><a href="#problem">Replay</a><a href="#cases">Real DAOs</a><a href="#try">Try it</a><a href="#join">Get started</a><a href="#faq">FAQ</a><a href="#proof">Verify</a><a href="https://github.com/QijomoFav35/Dissent-Finance/blob/main/JUDGE.md" target="_blank" rel="noopener">Docs</a><a href="https://github.com/QijomoFav35/Dissent-Finance" target="_blank" rel="noopener">GitHub</a></div></details></div>
 </div></header>
 
 <main id="main">
@@ -376,7 +529,7 @@ footer svg { width: 22px; height: 22px; color: #17191b; }
   <p class="live"><i aria-hidden="true"></i>Live on NEAR mainnet with real USDC</p>
   <h1>Outvoted? Take your share out before it’s paid.</h1>
   <p class="sub">Your group keeps its money together and votes on how to spend it. If it votes to spend money you didn’t agree to, Dissent Finance lets you take your share out first. A small program, your agent, does it for you.</p>
-  <div class="acts"><a class="btn go" href="#how">See how it works</a><a class="btn" href="#problem" data-play>Watch the live demo</a><span class="aside">No wallet needed. Every number is read from mainnet.</span></div>
+  <div class="acts"><a class="btn go" href="#how">See how it works</a><a class="btn" href="#problem" data-play>Watch the replay</a><span class="aside">No wallet needed. Every number is read from mainnet or GitHub, or marked as a replay.</span></div>
 </div>
 <div class="band"><div class="wrap">
   <div class="vault" id="vault" aria-labelledby="v-title">
@@ -388,12 +541,32 @@ footer svg { width: 22px; height: 22px; color: #17191b; }
     <div class="seats" id="v-seats" aria-label="The four members’ shares of the vault. Cara left in round 3."></div>
     <p class="seats-note" id="v-seats-note">Shares of the four members still in. Cara left in round 3.</p>
     <ul class="checks" aria-label="Checks read from mainnet">
-      <li><span class="ok" id="c-code-i">✓</span><span id="c-code">Code on chain is the build of commit 6ae0259</span></li>
-      <li><span class="ok" id="c-dao-i">✓</span><span id="c-dao">The DAO’s automatic code updates are off</span></li>
-      <li><span class="no" id="c-key-i">!</span><span id="c-key">1 full-access key is still on this vault</span></li>
+      <li><svg class="ic sm" aria-hidden="true" focusable="false"><use href="#i-code"/></svg><span class="ok" id="c-code-i">✓</span><span id="c-code">Code on chain is the build of commit 6ae0259</span></li>
+      <li><svg class="ic sm" aria-hidden="true" focusable="false"><use href="#i-lock"/></svg><span class="ok" id="c-dao-i">✓</span><span id="c-dao">The DAO’s automatic code updates are off</span></li>
+      <li><svg class="ic sm" aria-hidden="true" focusable="false"><use href="#i-key"/></svg><span class="no" id="c-key-i">!</span><span id="c-key">1 full-access key is still on this vault</span></li>
     </ul>
   </div>
+  <section class="duty" id="duty" aria-labelledby="duty-h">
+    <div class="duty-top"><p class="duty-h" id="duty-h"><i class="pulse" aria-hidden="true"></i>Members’ agents</p><a href="https://github.com/QijomoFav35/Dissent-Finance/actions/workflows/guard.yml" target="_blank" rel="noopener">Actions page</a></div>
+    <p class="duty-line" id="duty-line" aria-live="polite">Reading the guard’s status from GitHub…</p>
+    <div class="feed-h"><span>Live feed, from the vault’s record</span><span id="feed-when">Last read 14 Nov, 13:08 UTC</span></div>
+    <div class="feed" id="feed" tabindex="0" role="region" aria-label="Live feed of the vault’s record, newest first"><ol class="feed-list" id="feed-list"></ol></div>
+  </section>
 </div></div>
+<section class="sim" id="sim" aria-labelledby="sim-h">
+  <div class="sim-top"><span class="sim-tag" aria-hidden="true">Not live</span><h2 class="sim-h" id="sim-h">Simulation, same rules as the agents</h2></div>
+  <p class="sim-sub" id="sim-sub">Runs the agents’ own rules in your browser: <a href="https://github.com/QijomoFav35/Dissent-Finance/blob/422431347cc9811af2f2471795ba403137617c44/agent/src/rules.js" target="_blank" rel="noopener">agent/src/rules.js</a> as pinned to commit 422431347, checked against its hash before it runs. The payment is the real one: spend 0, 0.60 USDC to Ben. Each member’s rules are the ones in their agent’s note for that payment.</p>
+  <ol class="sim-list" id="sim-list"></ol>
+  <div class="sim-foot"><p id="sim-end" class="sim-end"></p><button class="btn" type="button" id="sim-run">Run again</button></div>
+</section>
+</div>
+
+<div class="tick" id="tick" role="region" aria-label="Events from the vault’s record">
+  <div class="wrap tick-in">
+    <p class="tick-k"><b><i aria-hidden="true"></i>On the vault’s record</b><span id="tick-when">Last read 14 Nov, 13:08 UTC</span></p>
+    <button class="tick-pause" type="button" id="motion" aria-pressed="false">Pause motion</button>
+    <div class="tick-view"><div class="tick-track" id="tick-track"></div></div>
+  </div>
 </div>
 
 <section id="how" class="how"><div class="wrap">
@@ -402,11 +575,11 @@ footer svg { width: 22px; height: 22px; color: #17191b; }
   <p class="key-legend" aria-label="What the colours mean"><span><i class="m"></i>Green is your money</span><span><i class="v"></i>Blue is the group’s vote</span><span><i class="w"></i>Amber is a wait, or something to watch</span></p>
   <div class="ex" id="ex">
     <div class="ex-list" role="tablist" aria-label="Five steps">
-      <button class="ex-item" role="tab" aria-selected="true" data-i="0"><span class="n">1</span><span><b>Everyone deposits money</b><span class="d">Members deposit USDC, a digital dollar, and a little NEAR into the vault. Each gets shares, like slices of a jar.</span></span></button>
-      <button class="ex-item" role="tab" aria-selected="false" data-i="1"><span class="n">2</span><span><b>The group votes on a payment proposal</b><span class="d">Payments are voted on in the group’s DAO, its shared voting room on NEAR. Same members, same rules as before.</span></span></button>
-      <button class="ex-item" role="tab" aria-selected="false" data-i="2"><span class="n">3</span><span><b>The vault waits before paying</b><span class="d">When a payment passes, the vault holds it for a set time. This waiting period works like a timelock. Ours lasts 10 minutes; a real group would choose hours or days.</span></span></button>
-      <button class="ex-item" role="tab" aria-selected="false" data-i="3"><span class="n">4</span><span><b>If you voted no, withdraw first</b><span class="d">Your agent checks the payment against your own rules. If it breaks one, it withdraws your exact share while the payment waits. DAOs call this a ragequit.</span></span></button>
-      <button class="ex-item" role="tab" aria-selected="false" data-i="4"><span class="n">5</span><span><b>Then it pays, or it’s cancelled</b><span class="d">After the wait, the payment goes out if the vault can still cover it. If too many people left, it can’t, and it’s cancelled.</span></span></button>
+      <button class="ex-item" role="tab" aria-selected="true" data-i="0"><span class="icb"><svg class="ic" aria-hidden="true" focusable="false"><use href="#i-deposit"/></svg><span class="n">1</span></span><span><b>Everyone deposits money</b><span class="d">Members deposit USDC, a digital dollar, and a little NEAR into the vault. Each gets shares, like slices of a jar.</span></span></button>
+      <button class="ex-item" role="tab" aria-selected="false" data-i="1"><span class="icb"><svg class="ic" aria-hidden="true" focusable="false"><use href="#i-vote"/></svg><span class="n">2</span></span><span><b>The group votes on a payment proposal</b><span class="d">Payments are voted on in the group’s DAO, its shared voting room on NEAR. Same members, same rules as before.</span></span></button>
+      <button class="ex-item" role="tab" aria-selected="false" data-i="2"><span class="icb"><svg class="ic" aria-hidden="true" focusable="false"><use href="#i-wait"/></svg><span class="n">3</span></span><span><b>The vault waits before paying</b><span class="d">When a payment passes, the vault holds it for a set time. This waiting period works like a timelock. Ours lasts 10 minutes; a real group would choose hours or days.</span></span></button>
+      <button class="ex-item" role="tab" aria-selected="false" data-i="3"><span class="icb"><svg class="ic" aria-hidden="true" focusable="false"><use href="#i-withdraw"/></svg><span class="n">4</span></span><span><b>If you voted no, withdraw first</b><span class="d">Your agent checks the payment against your own rules. If it breaks one, it withdraws your exact share while the payment waits. DAOs call this a ragequit.</span></span></button>
+      <button class="ex-item" role="tab" aria-selected="false" data-i="4"><span class="icb"><svg class="ic" aria-hidden="true" focusable="false"><use href="#i-settle"/></svg><span class="n">5</span></span><span><b>Then it pays, or it’s cancelled</b><span class="d">After the wait, the payment goes out if the vault can still cover it. If too many people left, it can’t, and it’s cancelled.</span></span></button>
     </div>
     <div class="ex-stage" role="tabpanel" aria-live="polite">
       <div class="ex-card" data-c="0" ><p class="ex-k">12 Nov, 10:07 to 10:13 UTC</p><div class="ex-row"><span>Alice</span><span class="m">+0.20 USDC</span></div><div class="ex-row"><span>Ben</span><span class="m">+0.20 USDC</span></div><div class="ex-row"><span>Cara</span><span class="m">+0.20 USDC</span></div><div class="ex-row"><span>Dan</span><span class="m">+0.20 USDC</span></div><div class="ex-row"><span>Emma</span><span class="m">+0.20 USDC</span></div><div class="ex-tot"><span>In the vault</span><b>1.00 USDC, 0.50 NEAR</b></div><p class="ex-u">Under the hood: <code>ft_transfer_call</code> with msg <code>"join"</code>, then <code>join</code> with NEAR attached. <a href="https://github.com/QijomoFav35/Dissent-Finance/blob/main/docs/MAINNET.md" target="_blank" rel="noopener">The five join transactions</a></p></div>
@@ -431,6 +604,7 @@ footer svg { width: 22px; height: 22px; color: #17191b; }
 <section id="problem"><div class="wrap">
   <h2>A fair vote can still spend your share on something you voted against.</h2>
   <p class="lede">On 12 November, two of our five members approved paying Ben 60% of the fund. Here is the same vote twice: on a DAO with no vault, and on mainnet with the vault in front.</p>
+  <p class="replay-tag"><span>Replay</span>Rebuilt from the vault’s record of 12 Nov. It is not the live feed: live numbers are in the card at the top of the page.</p>
   <div class="vs" id="vs">
     <div class="vs-head"><div class="l"><h3>The DAO alone</h3><p>What an unchanged DAO does with this vote</p></div><div class="t"><p style="margin:6px 0 0;text-align:center">Time</p></div><div class="r"><h3>With Dissent Finance</h3><p>What happened on mainnet, from the vault’s record</p></div></div>
     <div class="vs-row" data-at="0">
@@ -472,14 +646,14 @@ footer svg { width: 22px; height: 22px; color: #17191b; }
   <h2>Three ways out, each one used on mainnet.</h2>
   <p class="lede">Members keep their money in the vault and their votes in the DAO. When a payment comes up, these are the options.</p>
   <div class="ways">
-    <article class="way"><h3>Withdraw before it pays</h3><p>Your agent withdraws your exact share while the payment waits. If too many withdraw, the vault can’t cover it and it’s cancelled.</p>
+    <article class="way"><span class="icb"><svg class="ic" aria-hidden="true" focusable="false"><use href="#i-out"/></svg></span><h3>Withdraw before it pays</h3><p>Your agent withdraws your exact share while the payment waits. If too many withdraw, the vault can’t cover it and it’s cancelled.</p>
       <div class="receipt"><div class="big">0.20 USDC</div><p class="small">Emma’s agent, 8.0 seconds after the payment was queued.</p><a class="chip" href="https://nearblocks.io/txns/GqsAoKSZsysmtKKA37Vq5vX3pbsFWgrRMgWkjVWfeTUa" target="_blank" rel="noopener">GqsAoKSZ</a></div></article>
-    <article class="way"><h3>Sell your shares instead</h3><p>Offer your shares at a minimum price. The other members’ agents bid. The money in the vault doesn’t move.</p>
+    <article class="way"><span class="icb"><svg class="ic" aria-hidden="true" focusable="false"><use href="#i-sell"/></svg></span><h3>Sell your shares instead</h3><p>Offer your shares at a minimum price. The other members’ agents bid. The money in the vault doesn’t move.</p>
       <div class="receipt"><div class="big">0.085979 USDC</div><p class="small">Dan bought part of Cara’s shares after 7 bids by three agents, 95.5% of their value.</p>
         <div class="bc" id="bids"></div>
         <a class="chip" href="https://nearblocks.io/txns/6DxKZ99sg7t84ieVKXA7z9hmvcoPrzpSjjPKrAJvFwFN" target="_blank" rel="noopener">offer 6DxKZ99s</a><a class="chip" href="https://nearblocks.io/txns/A1cR7MQVKxysm1AxbwUU8xAnePaCT3bmCrNBhArXZrmp" target="_blank" rel="noopener">sale A1cR7MQV</a>
         <details class="tbl"><summary>All 7 bids</summary><div id="bid-table"></div></details></div></article>
-    <article class="way"><h3>Withdraw after voting yes</h3><p>You can withdraw even if you approved a payment. Your part of it stays behind and pays it, so changing your mind saves nothing.</p>
+    <article class="way"><span class="icb"><svg class="ic" aria-hidden="true" focusable="false"><use href="#i-after"/></svg></span><h3>Withdraw after voting yes</h3><p>You can withdraw even if you approved a payment. Your part of it stays behind and pays it, so changing your mind saves nothing.</p>
       <div class="receipt"><div class="big">0.016752 USDC</div><p class="small">Cara’s part of a 0.07 USDC payment she approved. It stayed when she left, and the payment went through.</p><a class="chip" href="https://nearblocks.io/txns/53qLDWKV7hAij7P9MeJFRjshBJfeKR8GRaTpsd4ikd6u" target="_blank" rel="noopener">exit 53qLDWKV</a><a class="chip" href="https://nearblocks.io/txns/9osUXBVnfdFhMyzKT4xKVKkzFJ56pnwAqoVdRj5kteKX" target="_blank" rel="noopener">paid 9osUXBVn</a></div></article>
   </div>
 </div></section>
@@ -495,7 +669,7 @@ footer svg { width: 22px; height: 22px; color: #17191b; }
       <div class="rule"><input type="checkbox" id="r-new"><label for="r-new">Withdraw if the vault has never paid this person before</label></div>
       <div class="rule"><input type="checkbox" id="r-block"><label for="r-block">Withdraw if the person is on my blocked list: ben.dissentfinance.near</label></div>
       <div class="rule"><input type="checkbox" id="r-voted"><label for="r-voted">I voted for this payment</label></div>
-      <p class="note">The same three checks as <a href="https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/rules.js" target="_blank" rel="noopener">agent/src/rules.js</a>, the file the live agents run.</p>
+      <p class="note">Your browser runs <a href="https://github.com/QijomoFav35/Dissent-Finance/blob/422431347cc9811af2f2471795ba403137617c44/agent/src/rules.js" target="_blank" rel="noopener">agent/src/rules.js</a>, the file the live agents run, pinned to commit 422431347 and checked against its hash.</p>
     </div>
     <div class="verdict" id="verdict" aria-live="polite">
       <div class="head"><small>Your agent decides</small><div class="dec" id="dec"></div></div>
@@ -511,7 +685,7 @@ footer svg { width: 22px; height: 22px; color: #17191b; }
   <p class="lede">There are three ways in, depending on who you are. The vault only lets in members of the DAO it sits next to, so joining starts with a DAO.</p>
   <div class="paths">
     <article class="path"><h3>Look around</h3><p class="for">For anyone, no wallet needed</p>
-      <ol><li>Watch <a href="#problem" data-play>the live demo</a> above.</li>
+      <ol><li>Watch <a href="#problem" data-play>the replay</a> above.</li>
       <li>See our DAO and its votes in <a href="https://trezu.app/dissentfinance.sputnik-dao.near/requests?tab=Approved" target="_blank" rel="noopener">Trezu</a>, the NEAR treasury app.</li>
       <li>Open <a href="https://nearblocks.io/address/vault2.dissentfinance.near" target="_blank" rel="noopener">the vault on NearBlocks</a> and check any number on this page.</li></ol></article>
     <article class="path"><h3>Join a group that uses it</h3><p class="for">For a member of a Sputnik DAO with a vault</p>
@@ -541,7 +715,7 @@ footer svg { width: 22px; height: 22px; color: #17191b; }
     </ul>
   </div>
   <div class="not" id="faq">
-    <h2>Questions, answered plainly.</h2>
+    <h2>Frequently asked questions</h2>
     <div style="margin-top:28px">
       <details open><summary>Is the vault locked yet?</summary><p class="keyline" id="key-long">v2 still has 1 full-access (admin) key, so whoever holds it can replace the vault’s code. v1 has none. This line is read from mainnet each time the page loads.</p></details>
       <details><summary>Can I stop a payment I don’t like?</summary><p>No, it isn’t a veto. You can only withdraw your share before it’s paid. If enough members withdraw, the vault can’t cover the payment and it’s cancelled.</p></details>
@@ -586,7 +760,17 @@ node agent/mainnet/verify.mjs</code></pre></div>
     <li><a href="https://github.com/QijomoFav35/Dissent-Finance" target="_blank" rel="noopener">Source on GitHub</a></li>
     <li><a href="https://github.com/QijomoFav35/Dissent-Finance/blob/main/JUDGE.md" target="_blank" rel="noopener">For judges</a></li>
     <li><a href="https://trezu.app/dissentfinance.sputnik-dao.near/requests?tab=Approved" target="_blank" rel="noopener">The DAO in Trezu</a></li></ul></div>
-</div></footer>
+</div>
+<div class="wrap foot-mark" aria-hidden="true"><svg viewBox="0 0 1000 176" preserveAspectRatio="xMidYMin meet" focusable="false">
+  <defs>
+    <linearGradient id="fm-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6EF5BE" stop-opacity=".55"/><stop offset=".55" stop-color="#00C08B" stop-opacity=".2"/><stop offset="1" stop-color="#00C08B" stop-opacity="0"/></linearGradient>
+    <clipPath id="fm-l"><polygon points="0,0 585,0 455,176 0,176"/></clipPath>
+    <clipPath id="fm-r"><polygon points="585,-30 1000,-30 1000,176 455,176"/></clipPath>
+    <text id="fm-t" x="0" y="238" textLength="986" lengthAdjust="spacingAndGlyphs" font-size="300" font-weight="600" letter-spacing="-12">Dissent</text>
+  </defs>
+  <g clip-path="url(#fm-l)"><use href="#fm-t" fill="url(#fm-g)"/></g>
+  <g clip-path="url(#fm-r)" transform="translate(14 24)"><use href="#fm-t" fill="url(#fm-g)"/></g>
+</svg></div></footer>
 
 <script>
 const VAULT = "vault2.dissentfinance.near", DAO = "dissentfinance.sputnik-dao.near";
@@ -620,7 +804,7 @@ function render(s) {
   $("v-seats").innerHTML = MEMBERS.map((m) => {
     const p = pct(s.shares[m], s.total), out = s.shares[m] === "0";
     const name = m[0].toUpperCase() + m.slice(1);
-    return `<div class="seat${out ? " out" : ""}"><div class="nm">${name}</div><div class="pc">${out ? "Left" : p.toFixed(1) + "%"}</div><div class="bar"><i style="width:${p}%"></i></div><div class="st">${out ? "took her share out" : "of the vault"}</div></div>`;
+    return `<div class="seat${out ? " out" : ""}"><div class="nm"><svg class="ic xs" aria-hidden="true" focusable="false"><use href="#i-${m}"/></svg>${name}</div><div class="pc">${out ? "Left" : p.toFixed(1) + "%"}</div><div class="bar"><i style="width:${p}%"></i></div><div class="st">${out ? "took her share out" : "of the vault"}</div></div>`;
   }).join("");
   const left = MEMBERS.filter((m) => s.shares[m] === "0").map((m) => m[0].toUpperCase() + m.slice(1));
   const inCount = MEMBERS.length - left.length;
@@ -647,11 +831,236 @@ async function readLive() {
       ...MEMBERS.map((m) => view(VAULT, "get_shares", { account_id: `${m}.dissentfinance.near` })),
     ]);
     const now = new Date();
+    view(VAULT, "get_record", { from_index: Math.max(0, len - 60), limit: 60 })
+      .then((raw) => { const rec = raw.map((x) => JSON.parse(x)), at = `${now.toISOString().slice(11, 16)} UTC`; renderTicker(tickerLines(rec, bal.members, len), true, at); renderFeed(rec, true, at); if (len <= 60) simRecord = rec; })
+      .catch(() => { /* keep the last-read record */ });
     render({ usdc: bal.usdc, near: bal.near, total: bal.total_shares, members: bal.members, open: bal.open_spends, records: len,
       shares: Object.fromEntries(MEMBERS.map((m, i) => [m, String(sh[i])])), code: acct.code_hash, autoUpdate: fi.auto_update,
       fullKeys: keys.keys.filter((x) => x.access_key.permission === "FullAccess").length, live: true,
       at: `${now.toISOString().slice(11, 16)} UTC` });
   } catch (e) { /* keep the last snapshot */ }
+}
+
+/* The vault's record as last read by hand (14 Nov 2026, 13:08 UTC; get_record_len was 17).
+   Replaced by a live get_record read when the page can reach mainnet. */
+const REC_SNAP_RAW = [
+  ["join","1794478065658090869",{account_id:"alice",usdc:"200000",shares:"100000000000000000000000"}],["join","1794478230195297465",{account_id:"ben",usdc:"200000",shares:"100000000000000000000000"}],
+  ["join","1794478243853787641",{account_id:"cara",usdc:"200000",shares:"100000000000000000000000"}],["join","1794478361985118432",{account_id:"dan",usdc:"200000",shares:"100000000000000000000000"}],
+  ["join","1794478401480862114",{account_id:"emma",usdc:"200000",shares:"100000000000000000000000"}],
+  ["queue_spend","1794490269844300751",{spend_id:0,recipient:"ben",amount:"600000",approve:2}],
+  ["exit","1794490277871714895",{account_id:"emma",usdc:"200000",shares:"100000000000000000000000",reason_hash:"8df97601"}],["exit","1794490277871714895",{account_id:"alice",usdc:"200000",shares:"100000000000000000000000",reason_hash:"2e4c2277"}],
+  ["exit","1794490278531829066",{account_id:"dan",usdc:"200000",shares:"100000000000000000000000",reason_hash:"531f3ee1"}],["cancel_spend","1794490281053538417",{spend_id:0,by:"emma"}],
+  ["join","1794542056734443236",{account_id:"alice",usdc:"100000",shares:"50000000000000000000000"}],["join","1794542089923427929",{account_id:"dan",usdc:"100000",shares:"50000000000000000000000"}],
+  ["join","1794542121524342912",{account_id:"emma",usdc:"100000",shares:"50000000000000000000000"}],
+  ["share_sale","1794563287952327224",{offer_id:0,seller:"cara",buyer:"dan",usdc:"85979",bids:7}],
+  ["queue_spend","1794563704159595345",{spend_id:1,recipient:"ben",amount:"70000",approve:2}],
+  ["exit","1794563804296895287",{account_id:"cara",usdc:"150593",shares:"83672640061536005456967",reason_hash:null}],
+  ["execute_spend","1794564722041338050",{spend_id:1,recipient:"ben",amount:"70000"}],
+];
+const REC_SNAP = REC_SNAP_RAW.map(([event, ts, d]) => ({ event, ts, data: [Object.fromEntries(Object.entries(d).map(([k, v]) => [k, typeof v === "string" && /^(account_id|by|seller|buyer|recipient)$/.test(k) ? `${v}.dissentfinance.near` : v]))] }));
+/* Transaction for each record entry, from agent/mainnet/evidence.jsonl, keyed by the entry's block
+   timestamp and account. An entry with no known transaction links to the vault's page instead. */
+const REC_TX = {
+  "1794478065658090869:alice": "GSN4tG2BtPspzVUpMkgicdSCK4CWQzGJrDGrx7fybWJW", "1794478230195297465:ben": "GX3PnzJF2GQxo2pW3i2WmXq4V8JMSiZP52JSZHM5kk8R",
+  "1794478243853787641:cara": "6g2xWxnkuW1hDvRmXXbbbtdeZggE15rP2k5EKudAuusm", "1794478361985118432:dan": "56oAem8dxuBh9rFHX45fEao7yGVS88iQVaBhytqC3gU8",
+  "1794478401480862114:emma": "GgCY2cVLw7A6gbgLbJkU66V49dLD6TBJ149KL5Q3ekmt", "1794490269844300751:ben": "DpKwEZ8L419yKGqnxDrqrv5hQK4UJM7pYCVtEMbAYxwu",
+  "1794490277871714895:emma": "GqsAoKSZsysmtKKA37Vq5vX3pbsFWgrRMgWkjVWfeTUa", "1794490277871714895:alice": "CGpp5bJe2ZB87QZTsnmvN4f28cQsjqS6yoPzzKsQKfKN",
+  "1794490278531829066:dan": "Msq3yLLHyQQjYehLowCZJDhQB3u48gAPvhsZrtTkmdg", "1794490281053538417:emma": "4cA4kFtvvuz6bVb5FRjP35Q76sHQKq3hWsabd59xLAAT",
+  "1794542056734443236:alice": "CjTqZ3ijhrwmkLo9FQTKrHw1dJD8PMRth9x9AAQV9r6A", "1794542089923427929:dan": "HPZPMU5M1w7Vpoc7E2kxS74H8iBVS1mgsz1SKj5wVysm",
+  "1794542121524342912:emma": "m3VBbweYC743VxbEYLyR5shjwEqk41KEhSPoph2zwJB", "1794563287952327224:dan": "A1cR7MQVKxysm1AxbwUU8xAnePaCT3bmCrNBhArXZrmp",
+  "1794563704159595345:ben": "9MgxBmfvUvwe5rHET3YPYf9uZTLXJhDYJbG24BxTS61w", "1794563804296895287:cara": "53qLDWKV7hAij7P9MeJFRjshBJfeKR8GRaTpsd4ikd6u",
+  "1794564722041338050:ben": "9osUXBVnfdFhMyzKT4xKVKkzFJ56pnwAqoVdRj5kteKX",
+};
+const who = (a) => { const n = String(a || "").split(".")[0]; return n[0].toUpperCase() + n.slice(1); };
+const u2 = (s) => { const x = Number(s) / 1e6; let t = x.toFixed(6).replace(/0+$/, ""); if ((t.split(".")[1] || "").length < 2) t = x.toFixed(2); return `${t} USDC`; };
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+/* One line per record entry, newest first. Only what the entry itself says. */
+function tickerLines(record, members, len) {
+  const queued = {}, lines = [];
+  record.forEach((e) => {
+    const d = e.data?.[0] || {};
+    let text, kind = "";
+    if (e.event === "queue_spend") queued[d.spend_id] = BigInt(e.ts);
+    const since = (id) => (Number(BigInt(e.ts) - (queued[id] ?? BigInt(e.ts))) / 1e9).toFixed(1);
+    const lastQ = Object.keys(queued).map(Number).sort((a, b) => b - a)[0];
+    if (e.event === "join") { text = `${who(d.account_id)} joined with ${u2(d.usdc)}`; kind = "m"; }
+    else if (e.event === "queue_spend") { text = `Spend ${d.spend_id} queued: ${u2(d.amount)} to ${who(d.recipient)}, after ${d.approve} yes votes in the DAO`; kind = "v"; }
+    else if (e.event === "exit" && d.reason_hash && lastQ !== undefined) { text = `${who(d.account_id)}’s agent withdrew ${u2(d.usdc)} · ${since(lastQ)} s after spend ${lastQ} was queued`; kind = "m"; }
+    else if (e.event === "exit") { text = `${who(d.account_id)} left with ${u2(d.usdc)}`; kind = "m"; }
+    else if (e.event === "cancel_spend") { text = `${who(d.by)}’s agent cancelled spend ${d.spend_id} · ${since(d.spend_id)} s after it was queued`; kind = "w"; }
+    else if (e.event === "share_sale") { text = `${who(d.buyer)} bought part of ${who(d.seller)}’s shares for ${u2(d.usdc)} after ${d.bids} bids`; kind = "m"; }
+    else if (e.event === "execute_spend") { text = `Spend ${d.spend_id} paid ${u2(d.amount)} to ${who(d.recipient)}`; kind = "v"; }
+    else text = `${e.event.replace(/_/g, " ")} on record`;
+    const key = `${e.ts}:${String(d.account_id || d.by || d.buyer || d.recipient || "").split(".")[0]}`;
+    lines.push({ text, kind, tx: REC_TX[key] || null });
+  });
+  lines.reverse();
+  lines.unshift({ text: `${members} members in · ${len} events on record`, kind: "", tx: null });
+  return lines;
+}
+function renderTicker(lines, live, at) {
+  const a = (l, hidden) => {
+    const href = l.tx ? `https://nearblocks.io/txns/${l.tx}` : `https://nearblocks.io/address/${VAULT}`;
+    const tail = l.tx ? `<span class="tx">${l.tx.slice(0, 8)}</span>` : `<span class="tx">vault</span>`;
+    return `<a href="${href}" target="_blank" rel="noopener"${hidden ? ' tabindex="-1"' : ""}><span class="ev ${l.kind}" aria-hidden="true"></span>${esc(l.text)}${tail}</a>`;
+  };
+  const track = $("tick-track");
+  track.innerHTML = `<div class="tick-g">${lines.map((l) => a(l, false)).join("")}</div><div class="tick-g" aria-hidden="true">${lines.map((l) => a(l, true)).join("")}</div>`;
+  $("tick").classList.toggle("is-live", !!live);
+  $("tick-when").textContent = live ? `Read from mainnet just now, ${at}` : `Last read ${at}`;
+  requestAnimationFrame(() => { const w = track.firstElementChild.getBoundingClientRect().width; track.style.setProperty("--tick-s", `${Math.max(60, Math.round(w / 30))}s`); });
+}
+
+/* The guard shift on GitHub Actions, from the public API. Kept in memory for 5 minutes. */
+const GUARD_API = "https://api.github.com/repos/QijomoFav35/Dissent-Finance/actions/workflows/guard.yml/runs?per_page=10";
+const GUARD_PAGE = "https://github.com/QijomoFav35/Dissent-Finance/actions/workflows/guard.yml";
+const SHIFT_MIN = 340; /* guard.yml: each shift watches 340 minutes by default */
+let guardCache = { t: 0, runs: null };
+async function guardRuns() {
+  if (guardCache.runs && Date.now() - guardCache.t < 5 * 60_000) return guardCache.runs;
+  const r = await fetch(GUARD_API, { headers: { accept: "application/vnd.github+json" } });
+  if (!r.ok) throw new Error(`GitHub ${r.status}`);
+  const runs = (await r.json()).workflow_runs || [];
+  guardCache = { t: Date.now(), runs };
+  return runs;
+}
+const hm = (d) => {
+  const now = new Date(), same = d.toISOString().slice(0, 10) === now.toISOString().slice(0, 10);
+  return `${same ? "" : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) + ", "}${d.toISOString().slice(11, 16)} UTC`;
+};
+async function guard() {
+  const duty = $("duty"), line = $("duty-line");
+  try {
+    const runs = await guardRuns();
+    const on = runs.filter((r) => r.status === "in_progress").sort((a, b) => Date.parse(b.run_started_at) - Date.parse(a.run_started_at))[0];
+    const last = runs.filter((r) => r.status === "completed").sort((x, y) => Date.parse(y.updated_at) - Date.parse(x.updated_at))[0];
+    const lastTxt = last ? ` Last check <b>${hm(new Date(last.updated_at))}</b>.` : "";
+    if (on) {
+      const until = new Date(Date.parse(on.run_started_at) + SHIFT_MIN * 60_000);
+      duty.classList.add("on");
+      line.innerHTML = `On duty until <b>${hm(until)}</b>.${lastTxt}`;
+    } else {
+      duty.classList.remove("on");
+      line.innerHTML = `Off duty right now.${lastTxt}`;
+    }
+  } catch (e) {
+    duty.classList.remove("on");
+    line.innerHTML = `Status unavailable, see <a href="${GUARD_PAGE}" target="_blank" rel="noopener">the Actions page</a>.`;
+  }
+}
+
+/* Live feed: queued spends, exits, cancels, sales and payments from the record, newest first, looping. */
+const FEED_EVENTS = new Set(["queue_spend", "exit", "cancel_spend", "share_sale", "execute_spend"]);
+let feedTimer = 0;
+function renderFeed(record, live, at) {
+  const lines = tickerLines(record.filter((e) => FEED_EVENTS.has(e.event)), 0, 0).slice(1);
+  const times = record.filter((e) => FEED_EVENTS.has(e.event)).map((e) => new Date(Number(BigInt(e.ts) / 1000000n))).reverse();
+  const row = (l, i, hidden) => `<li${hidden ? ' aria-hidden="true"' : ""}><span class="ev ${l.kind}" aria-hidden="true"></span><span class="t"><span class="x">${esc(l.text)}</span><small>${times[i].toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}, ${times[i].toISOString().slice(11, 19)} UTC</small></span>${l.tx ? `<a href="https://nearblocks.io/txns/${l.tx}" target="_blank" rel="noopener"${hidden ? ' tabindex="-1"' : ""}>${l.tx.slice(0, 8)}</a>` : `<a href="https://nearblocks.io/address/${VAULT}" target="_blank" rel="noopener"${hidden ? ' tabindex="-1"' : ""}>vault</a>`}</li>`;
+  const list = $("feed-list");
+  list.innerHTML = lines.map((l, i) => row(l, i, false)).join("") + lines.slice(0, 3).map((l, i) => row(l, i, true)).join("");
+  $("feed-when").textContent = live ? `Read from mainnet just now, ${at}` : `Last read ${at}`;
+  clearInterval(feedTimer);
+  let i = 0; list.style.transform = "translateY(0)";
+  const feed = $("feed");
+  feedTimer = setInterval(() => {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches || document.body.classList.contains("still") || feed.matches(":hover, :focus-within") || document.hidden) return;
+    i += 1; list.classList.remove("jump"); list.style.transform = `translateY(calc(var(--row) * -${i}))`;
+    if (i === lines.length) setTimeout(() => { list.classList.add("jump"); i = 0; list.style.transform = "translateY(0)"; }, 800);
+  }, 4000);
+}
+
+/* The agents' own rules: agent/src/rules.js at commit 422431347, checked against its sha384 before it runs. */
+const RULES_URL = "https://raw.githubusercontent.com/QijomoFav35/Dissent-Finance/422431347cc9811af2f2471795ba403137617c44/agent/src/rules.js";
+const RULES_SRI = "sha384-Oq78w5hEjA7aE4bUcDl4s/wcrs4npKzSD4wYz7TdTgnB5nk9+hOTJ9uioN7lJDVA";
+let rulesMod = null;
+async function loadRules() {
+  if (rulesMod) return rulesMod;
+  const text = await fetch(RULES_URL, { integrity: RULES_SRI }).then((r) => { if (!r.ok) throw new Error(`rules.js ${r.status}`); return r.text(); });
+  const url = URL.createObjectURL(new Blob([text], { type: "text/javascript" }));
+  try { rulesMod = await import(url); } finally { URL.revokeObjectURL(url); }
+  return rulesMod;
+}
+
+/* Each member's rules for spend 0, from their agent's note (agent/mainnet/notes/vault2/0-*.json).
+   The exits carried these notes' SHA-256 on chain. Today's rules differ: they were changed for round 3. */
+const SPEND0_RULES = {
+  alice: { max_spend_share_bps: 2000, new_recipient: false, blocked_recipients: [] },
+  ben: { max_spend_share_bps: 1000, new_recipient: false, blocked_recipients: [] },
+  cara: { max_spend_share_bps: 1000, new_recipient: false, blocked_recipients: [] },
+  dan: { max_spend_share_bps: null, new_recipient: true, blocked_recipients: [] },
+  emma: { max_spend_share_bps: null, new_recipient: false, blocked_recipients: ["ben.dissentfinance.near"] },
+};
+let simSpend = { id: 0, recipient: "ben.dissentfinance.near", token: "Usdc", amount: "600000", approvers: ["ben.dissentfinance.near", "cara.dissentfinance.near"] };
+let simRecord = REC_SNAP;
+function simulate({ evaluate, unaffordable }) {
+  const rec = simRecord, q = rec.find((e) => e.event === "queue_spend" && e.data[0].spend_id === simSpend.id);
+  if (!q) return null;
+  const before = rec.filter((e) => BigInt(e.ts) < BigInt(q.ts));
+  let usdc = 0n, total = 0n; const shares = {};
+  for (const e of before) {
+    const d = e.data[0], m = String(d.account_id || "").split(".")[0];
+    if (e.event === "join") { usdc += BigInt(d.usdc); total += BigInt(d.shares ?? 1); shares[m] = (shares[m] ?? 0n) + BigInt(d.shares ?? 1); }
+    if (e.event === "exit") { usdc -= BigInt(d.usdc); total -= BigInt(d.shares ?? 0); shares[m] = 0n; }
+  }
+  const paidBefore = before.some((e) => e.event === "execute_spend" && e.data[0].recipient === simSpend.recipient);
+  const cancel = rec.find((e) => e.event === "cancel_spend" && e.data[0].spend_id === simSpend.id);
+  const fund = { balances: { usdc: String(usdc), near: "0" }, recipientPaidBefore: paidBefore };
+  let left = usdc;
+  const steps = MEMBERS.map((m) => {
+    const id = `${m}.dissentfinance.near`, approved = simSpend.approvers.includes(id);
+    const res = approved ? { decision: "stay", checks: [{ rule: "approved" }] } : evaluate(simSpend, SPEND0_RULES[m], fund);
+    const out = res.decision === "exit" ? (usdc * (shares[m] ?? 0n)) / (total || 1n) : 0n;
+    left -= out;
+    const why = res.checks.map((c) => c.rule === "approved" ? "Voted yes in the DAO, so the agent stays."
+      : c.rule === "max_spend_share_bps" ? `No payment over ${c.limit / 100}% of the fund. This one takes ${c.value / 100}%.`
+      : c.rule === "new_recipient" ? `Only pay accounts this vault has paid before. ${who(simSpend.recipient)} was ${c.value === "never paid" ? "never paid" : "paid before"}.`
+      : `Never pay ${c.limit.map(who).join(", ")}. ${who(c.value)} is ${c.broken ? "on" : "not on"} the list.`).join(" ") || "No rules set.";
+    const real = cancel && rec.find((e) => e.event === "exit" && e.data[0].account_id === id && BigInt(e.ts) >= BigInt(q.ts) && BigInt(e.ts) <= BigInt(cancel.ts));
+    const tx = real && REC_TX[`${real.ts}:${m}`];
+    const same = res.decision === "exit"
+      ? (real ? `Same on mainnet: withdrew ${u2(real.data[0].usdc)}${tx ? ` <a href="https://nearblocks.io/txns/${tx}" target="_blank" rel="noopener">${tx.slice(0, 8)}</a>` : ""}` : "Not what happened on mainnet")
+      : (real ? "Not what happened on mainnet" : "Same on mainnet: no withdrawal on record");
+    return { m, decision: res.decision, out, why, same };
+  });
+  const dead = unaffordable(simSpend, { usdc: String(left), near: "0" });
+  const ctx = cancel && REC_TX[`${cancel.ts}:${String(cancel.data[0].by).split(".")[0]}`];
+  const end = dead
+    ? `Left in the vault: <b>${u2(left)}</b>. ${u2(simSpend.amount)} plus the 0.1% fee can’t be paid, so any agent can cancel it.${cancel ? ` On mainnet ${who(cancel.data[0].by)}’s agent did${ctx ? `: <a href="https://nearblocks.io/txns/${ctx}" target="_blank" rel="noopener">${ctx.slice(0, 8)}</a>` : ""}.` : ""}`
+    : `Left in the vault: <b>${u2(left)}</b>. The vault can still pay ${u2(simSpend.amount)}.`;
+  return { steps, end };
+}
+let simTimer = 0;
+async function runSim() {
+  let mod;
+  try { mod = await loadRules(); }
+  catch (e) { $("sim-list").innerHTML = `<li><span></span><span class="why">Couldn’t load agent/src/rules.js from GitHub, so the simulation can’t run here. <a href="https://github.com/QijomoFav35/Dissent-Finance/blob/422431347cc9811af2f2471795ba403137617c44/agent/src/rules.js" target="_blank" rel="noopener">Read the rules</a>.</span></li>`; $("sim-end").textContent = ""; return; }
+  const r = simulate(mod); if (!r) return;
+  clearTimeout(simTimer);
+  $("sim-list").innerHTML = r.steps.map((x) => `<li class="wait"><svg class="ic xs" aria-hidden="true" focusable="false"><use href="#i-${x.m}"/></svg><span><b>${who(x.m)}’s agent.</b> <span class="why">${esc(x.why)}</span></span><span class="dec ${x.decision === "exit" ? "out" : "stay"}">${x.decision === "exit" ? `Withdraws ${u2(x.out)}` : "Stays"}</span><span class="same">${x.same}</span></li>`).join("");
+  const end = $("sim-end"); end.innerHTML = r.end; end.classList.add("wait");
+  const items = [...$("sim-list").children];
+  const instant = matchMedia("(prefers-reduced-motion: reduce)").matches || document.body.classList.contains("still");
+  if (instant) { items.forEach((li) => li.classList.remove("wait")); end.classList.remove("wait"); return; }
+  let k = 0;
+  const next = () => { if (k < items.length) { items[k++].classList.remove("wait"); simTimer = setTimeout(next, 1600); } else end.classList.remove("wait"); };
+  simTimer = setTimeout(next, 400);
+}
+function setupSim() {
+  $("sim-run").addEventListener("click", runSim);
+  const sim = $("sim");
+  if (!("IntersectionObserver" in window)) return runSim();
+  const io = new IntersectionObserver((es) => { if (es.some((x) => x.isIntersecting)) { io.disconnect(); runSim(); } }, { threshold: 0.35 });
+  io.observe(sim);
+}
+async function readSimSpend() {
+  try { const sp = await view(VAULT, "get_spend", { spend_id: 0 }); if (sp) simSpend = { id: sp.id, recipient: sp.recipient, token: sp.token, amount: sp.amount, approvers: sp.approvers }; } catch (e) { /* keep the last read */ }
+}
+
+function fillBars() {
+  const seats = $("v-seats");
+  if (!("IntersectionObserver" in window) || matchMedia("(prefers-reduced-motion: reduce)").matches) { seats.classList.add("filled"); return; }
+  const io = new IntersectionObserver((es) => { if (es.some((x) => x.isIntersecting)) { requestAnimationFrame(() => seats.classList.add("filled")); io.disconnect(); } }, { threshold: 0.4 });
+  io.observe(seats);
 }
 
 /* Replay the two columns at real speed: rows appear at the second they happened. */
@@ -699,23 +1108,31 @@ function bids() {
 }
 
 /* Try it: the rules from agent/src/rules.js, against spend 0 (0.60 of 1.00 USDC to Ben, never paid before). */
+/* Write your agent's rules: the same evaluate() from agent/src/rules.js (pinned, hash-checked) decides. */
 function tryIt() {
-  const SPEND = 600000n, FUND = 1000000n, share = (SPEND * 10000n + FUND - 1n) / FUND;
   const f = (id) => $(id);
+  const SPEND = { id: 0, proposal_id: 1, recipient: "ben.dissentfinance.near", token: "Usdc", amount: "600000" };
+  const FUND = { balances: { usdc: "1000000", near: "500000000000000000000000" }, recipientPaidBefore: false };
   async function run() {
     f("r-cap-o").textContent = `${f("r-cap-v").value}%`; f("r-cap-v").disabled = !f("r-cap").checked;
-    const checks = [];
-    if (f("r-cap").checked) checks.push({ rule: "max_spend_share_bps", limit: +f("r-cap-v").value * 100, value: Number(share), broken: share > BigInt(+f("r-cap-v").value * 100), text: `Takes ${Number(share) / 100}% of the fund. Your limit is ${f("r-cap-v").value}%.` });
-    if (f("r-new").checked) checks.push({ rule: "new_recipient", limit: "paid before", value: "never paid", broken: true, text: "The vault has never paid Ben before." });
-    if (f("r-block").checked) checks.push({ rule: "blocked_recipients", limit: ["ben.dissentfinance.near"], value: "ben.dissentfinance.near", broken: true, text: "Ben is on your blocked list." });
-    const voted = f("r-voted").checked, broken = checks.some((c) => c.broken), leave = broken && !voted;
+    let mod;
+    try { mod = await loadRules(); }
+    catch (e) { $("dec").textContent = ""; $("why").innerHTML = "<li><b>Not run</b>Couldn’t load agent/src/rules.js from GitHub, so your agent can’t decide here.</li>"; $("h").textContent = "not computed"; return; }
+    const rules = { max_spend_share_bps: f("r-cap").checked ? +f("r-cap-v").value * 100 : null, new_recipient: f("r-new").checked, blocked_recipients: f("r-block").checked ? ["ben.dissentfinance.near"] : [] };
+    const voted = f("r-voted").checked;
+    // As the agent does (agent/src/agent.js): a member who voted for the spend stays; otherwise evaluate() decides.
+    const result = voted ? { decision: "stay", checks: [{ rule: "approved", limit: null, value: "member voted Approve", broken: false }] } : mod.evaluate(SPEND, rules, FUND);
+    const leave = result.decision === "exit";
     const v = $("verdict"); v.className = `verdict${leave ? " leave" : ""}`;
     $("dec").textContent = leave ? "Withdraws your 0.20 USDC before Ben is paid" : "Stays";
-    const items = checks.map((c) => `<li><b class="${c.broken ? "br" : ""}">${c.broken ? "Rule broken" : "Rule kept"}</b>${c.text}</li>`);
-    if (voted) items.push(`<li><b>Stays</b>You voted for this payment. If you left anyway, your part would stay behind to pay it.</li>`);
-    if (!checks.length && !voted) items.push(`<li><b>No rules</b>Your agent has nothing to check, so it stays.</li>`);
+    const say = (c) => c.rule === "max_spend_share_bps" ? `Takes ${c.value / 100}% of the fund. Your limit is ${c.limit / 100}%.`
+      : c.rule === "new_recipient" ? (c.broken ? "The vault has never paid Ben before." : "The vault has paid Ben before.")
+      : c.rule === "blocked_recipients" ? (c.broken ? "Ben is on your blocked list." : "Ben is not on your blocked list.")
+      : "You voted for this payment. If you left anyway, your part would stay behind to pay it.";
+    const items = result.checks.map((c) => c.rule === "approved" ? `<li><b>Stays</b>${say(c)}</li>` : `<li><b class="${c.broken ? "br" : ""}">${c.broken ? "Rule broken" : "Rule kept"}</b>${say(c)}</li>`);
+    if (!result.checks.length) items.push(`<li><b>No rules</b>Your agent has nothing to check, so it stays.</li>`);
     $("why").innerHTML = items.join("");
-    const note = JSON.stringify({ v: 1, vault: VAULT, member: "you", spend: { id: 0, proposal_id: 1, recipient: "ben.dissentfinance.near", token: "Usdc", amount: "600000" }, checks, approved_by_member: voted, decision: leave ? "exit" : "stay" });
+    const note = JSON.stringify({ v: 1, vault: VAULT, member: "you", spend: SPEND, rules, checks: result.checks, approved_by_member: voted, decision: result.decision });
     try { const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(note)); $("h").textContent = [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join(""); }
     catch (e) { $("h").textContent = "needs a secure page (https) to compute"; }
   }
@@ -743,7 +1160,8 @@ function explorer() {
   wide.addEventListener("change", () => show(items.findIndex((b) => b.getAttribute("aria-selected") === "true")));
   show(0);
 }
-document.addEventListener("DOMContentLoaded", () => { explorer(); render(SNAP); readLive(); setupReplay(); bids(); tryIt(); });
+document.addEventListener("DOMContentLoaded", () => { explorer(); render(SNAP); renderTicker(tickerLines(REC_SNAP, SNAP.members, SNAP.records), false, SNAP.at); renderFeed(REC_SNAP, false, SNAP.at); fillBars(); readLive(); readSimSpend(); setupSim();
+  $("motion").addEventListener("click", (e) => { const on = document.body.classList.toggle("still"); e.currentTarget.setAttribute("aria-pressed", String(on)); e.currentTarget.textContent = on ? "Play motion" : "Pause motion"; }); guard(); setInterval(guard, 5 * 60_000); setupReplay(); bids(); tryIt(); });
 </script>
 </body>
 </html>

@@ -61,7 +61,7 @@ near contract verify deployed-at vault2.dissentfinance.near network-config mainn
 | 10 sandbox tests | `cargo test --test sputnik_flow` | the real mainnet Sputnik DAO code, real proposals and votes, agent and market keys refused outside their methods |
 | 5 agent processes | `cargo test --test swarm_scenario -- --nocapture` | the story above with one process per member key |
 | 53 agent tests | `cd agent && npm install && npm test` | decisions, retries, notes, prompt injection in a memo, the market agent, and `verify.mjs` against six planted faults |
-| 10 page tests | `cd tests/page && npm install && npx playwright install chromium && npm test` | the live page in headless Chromium |
+| 11 page tests | `cd tests/page && npm install && npx playwright install chromium && npm test` | the live page in headless Chromium |
 
 Expected output for each, step by step: [docs/TESTING.md](docs/TESTING.md). CI runs all of them on every push.
 
