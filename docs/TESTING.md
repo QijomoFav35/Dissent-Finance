@@ -21,13 +21,24 @@ You need Rust 1.95 (pinned in `rust-toolchain.toml`) with the `wasm32-unknown-un
 
    You should see 53 pass, 0 fail. They include the story in the [README](../README.md#the-story-the-tests-check), retries that reuse the same note with a backoff and a cap, a prompt injection in the spend's memo, five separate agents each with only its own key, the simulation below, the guard refusing any key broader than an agent key, the market agent's bids, limits and settling, the 20-agent market simulation, and `verify.mjs` run against a stand-in for mainnet: every check passes on the real state and on the state the third run leaves, and six planted faults (a widened agent key, a wrong note hash, unbalanced books, a share sale under its reserve, the DAO's auto-update switched back on, an access key on a vault that should have none) each fail their check.
 
-   The demo page has its own tests, in headless Chromium against a stand-in for mainnet RPC:
+   The site has its own tests: they load `docs/preview/index.html` in headless Chromium against a stand-in for mainnet RPC, GitHub's API and the repo's raw files:
 
    ```
    cd tests/page && npm install && npx playwright install chromium && npm test
    ```
 
-   You should see 9 pass: v1's checks and two outcomes read from its record, later exits kept out of the spend, a note whose hash does not match failing the page's check, the proof panel, v2 with the guard run on duty, the guard row when GitHub's API refuses, the share market panel before and after the market code, the "Try it" panel running the agent's own `rules.js` for presets and custom rules, and no sideways scroll on a phone.
+   You should see 11 pass, 0 fail:
+   - the main address sends visitors to ./preview/
+   - the live card reads the vault from mainnet
+   - when mainnet can't be read, every live part says it shows the last read
+   - the guard row: on duty until the shift's planned end, and the last check
+   - the guard row says so when GitHub's API refuses
+   - the replay is labelled as a replay, the simulation as not live
+   - the feed and the ticker: events from the record, newest first, each linked to its transaction
+   - the simulation runs agent/src/rules.js, pinned and hash-checked, and matches mainnet
+   - write your rules: agent/src/rules.js decides, for your own rules
+   - the simulation refuses a rules.js that doesn't match its pinned hash
+   - on a phone the page does not scroll sideways and keeps a 16px margin
 
 3. Contract unit and property tests.
 
