@@ -759,7 +759,7 @@ async function tryRun() {
   const h = await sha256(canonical(note));
   $("try-hash").textContent = `sha256 of this note: ${h}. A real agent's note also carries the time it was written, and its hash goes on chain as the exit's reason_hash.`;
   $("try-note").textContent = JSON.stringify(note, null, 2);
-  $("try-src").innerHTML = `Rules from <a href="https://github.com/QijomoFav35/Dissent-Finance/blob/main/agent/src/rules.js">agent/src/rules.js</a>, ${TRY.src.lines} lines, sha256 ${TRY.src.sha.slice(0, 16)}…, as it is on the main branch now.`;
+  $("try-src").innerHTML = `Rules from <a href="https://github.com/QijomoFav35/Dissent-Finance/blob/422431347cc9811af2f2471795ba403137617c44/agent/src/rules.js">agent/src/rules.js</a>, ${TRY.src.lines} lines, sha256 ${TRY.src.sha.slice(0, 16)}…, as pinned to commit 422431347.`;
 }
 function tryApply(p) {
   const r = p.rules || {};
