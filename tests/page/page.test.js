@@ -115,7 +115,7 @@ async function open(views, { width = 1200, query = "?v=vault", guard = { status:
     await route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ jsonrpc: "2.0", id: body.id, result }) });
   });
   await page.route(/raw\.githubusercontent\.com/, async (route) => {
-    const f = path.join(repo, route.request().url().split("/Dissent-Finance/main/")[1]);
+    const f = path.join(repo, route.request().url().split("/Dissent-Finance/")[1].replace(/^[^/]+\//, ""));
     if (fs.existsSync(f)) await route.fulfill({ status: 200, body: fs.readFileSync(f), headers: { "access-control-allow-origin": "*" } });
     else await route.fulfill({ status: 404, body: "" });
   });

@@ -709,7 +709,8 @@ $("cli").textContent = $("cli").textContent.replaceAll("VAULT_ID", VAULT);
 $("cmd-verify").textContent = $("cmd-verify").textContent.replace(" VAULT_FLAG", VAULTS[PICK].flag ? ` ${VAULTS[PICK].flag}` : "");
 // ---------- try it: the agent's own rules.js, run in the browser ----------
 const TRY = { ctx: null, presets: [], mod: null, src: null, ready: false };
-const RULES_URL = "https://raw.githubusercontent.com/QijomoFav35/Dissent-Finance/main/agent/src/rules.js";
+const RULES_URL = "https://raw.githubusercontent.com/QijomoFav35/Dissent-Finance/422431347cc9811af2f2471795ba403137617c44/agent/src/rules.js";
+const RULES_SRI = "sha384-Oq78w5hEjA7aE4bUcDl4s/wcrs4npKzSD4wYz7TdTgnB5nk9+hOTJ9uioN7lJDVA";
 async function loadRules() {
   if (TRY.mod) return TRY.mod;
   if (TRY.loading) return TRY.loading;
@@ -717,7 +718,7 @@ async function loadRules() {
   return TRY.loading;
 }
 async function fetchRules() {
-  const text = await fetch(RULES_URL).then((r) => { if (!r.ok) throw new Error(`rules.js ${r.status}`); return r.text(); });
+  const text = await fetch(RULES_URL, { integrity: RULES_SRI }).then((r) => { if (!r.ok) throw new Error(`rules.js ${r.status}`); return r.text(); });
   TRY.src = { sha: await sha256(text), lines: text.split("\n").length };
   const url = URL.createObjectURL(new Blob([text], { type: "text/javascript" }));
   TRY.mod = await import(url);

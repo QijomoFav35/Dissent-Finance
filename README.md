@@ -61,7 +61,7 @@ near contract verify deployed-at vault2.dissentfinance.near network-config mainn
 | 10 sandbox tests | `cargo test --test sputnik_flow` | the real mainnet Sputnik DAO code, real proposals and votes, agent and market keys refused outside their methods |
 | 5 agent processes | `cargo test --test swarm_scenario -- --nocapture` | the story above with one process per member key |
 | 53 agent tests | `cd agent && npm install && npm test` | decisions, retries, notes, prompt injection in a memo, the market agent, and `verify.mjs` against six planted faults |
-| 9 page tests | `cd tests/page && npm install && npx playwright install chromium && npm test` | the live page in headless Chromium |
+| 10 page tests | `cd tests/page && npm install && npx playwright install chromium && npm test` | the live page in headless Chromium |
 
 Expected output for each, step by step: [docs/TESTING.md](docs/TESTING.md). CI runs all of them on every push.
 
@@ -80,6 +80,10 @@ Expected output for each, step by step: [docs/TESTING.md](docs/TESTING.md). CI r
 - Any spend queued while an auction runs ends that auction unsold, even a spend that settles before the auction ends. This protects bidders, and it means a council that queues spends often leaves little room for sales.
 - A bidder who exits while leading an auction takes their bid back, and the auction carries on with no bids; earlier, outbid bids are not restored, so a late exit by the leader can leave an offer unsold.
 - The agent runs on the member's own machine or server. If it is offline for the whole window, the member can still exit by hand.
+
+## Known issues
+
+- The vault uses `wee_alloc` 0.4.5, the memory allocator `near-sdk` 5.30.1 turns on by default. It is flagged as unmaintained ([GHSA-rc23-xxgq-x27g](https://github.com/advisories/GHSA-rc23-xxgq-x27g), RUSTSEC-2022-0054) and rated critical on OSV.dev, and it is in the deployed contract. It stays unchanged until a planned redeploy after the hackathon, since removing it changes the code hash that `verify.mjs` and JUDGE.md pin.
 
 ## Agents on duty
 
